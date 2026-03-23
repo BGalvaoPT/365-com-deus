@@ -28,7 +28,7 @@
   .btn-secondary {
     @apply bg-white dark:bg-neutral-800 text-parchment-700 dark:text-neutral-300
     font-medium py-3 px-6 rounded-xl border border-parchment-200 dark:border-neutral-700
-    hover:bg-parchment-50 dark:hover:bg-neutral-750 transition-colors duration-200;
+    hover:bg-parchment-50 dark:hover:bg-neutral-700 transition-colors duration-200;
   }
 
   .btn-success {
