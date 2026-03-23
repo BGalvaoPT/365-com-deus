@@ -69,7 +69,7 @@ export async function GET(request: Request) {
     for (const profile of profiles) {
       try {
         await webPush.sendNotification(
-          profile.push_subscription as webPush.PushSubscription,
+          profile.push_subscription as any,
           JSON.stringify({
             title: "365 com Deus",
             body: "Hora do teu devocional. Abre a Palavra.",
