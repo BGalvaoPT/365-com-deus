@@ -1,0 +1,103 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: Georgia, "Times New Roman", serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-parchment-100 text-parchment-900;
+  }
+
+  .dark body {
+    @apply bg-neutral-950 text-neutral-200;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-gold-600 text-white font-semibold py-3 px-6 rounded-xl
+    hover:bg-gold-700 transition-colors duration-200
+    focus:outline-none focus:ring-2 focus:ring-gold-400 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply bg-white dark:bg-neutral-800 text-parchment-700 dark:text-neutral-300
+    font-medium py-3 px-6 rounded-xl border border-parchment-200 dark:border-neutral-700
+    hover:bg-parchment-50 dark:hover:bg-neutral-750 transition-colors duration-200;
+  }
+
+  .btn-success {
+    @apply bg-emerald-600 text-white font-semibold py-4 px-6 rounded-xl
+    hover:bg-emerald-700 transition-colors duration-200
+    focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2;
+  }
+
+  .card {
+    @apply bg-white dark:bg-neutral-900 rounded-2xl border border-parchment-200
+    dark:border-neutral-800 shadow-sm;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 rounded-xl border border-parchment-200 dark:border-neutral-700
+    bg-parchment-100 dark:bg-neutral-800 text-parchment-900 dark:text-neutral-200
+    focus:outline-none focus:ring-2 focus:ring-gold-400 focus:border-transparent
+    placeholder:text-parchment-400 dark:placeholder:text-neutral-500;
+  }
+
+  .section-label {
+    @apply text-xs font-semibold uppercase tracking-widest text-gold-600 dark:text-gold-500 mb-3;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+/* Animações */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.4s ease-out;
+}
+
+/* Scrollbar minimalista */
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(139, 105, 20, 0.2);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(201, 169, 110, 0.2);
+}
+
+/* Remove tap highlight no mobile */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
