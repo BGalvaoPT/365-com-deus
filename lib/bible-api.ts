@@ -35,12 +35,14 @@ export interface BiblePassage {
  * Inclui todas as 66 livros da Bíblia
  */
 const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
-  // Antigo Testamento - Pentateuco
+  // Antigo Testamento - Pentateuco (PT-BR + PT-PT)
   'Gênesis': 'genesis',
+  'Génesis': 'genesis',
   'Êxodo': 'exodus',
   'Levítico': 'leviticus',
   'Números': 'numbers',
   'Deuteronômio': 'deuteronomy',
+  'Deuteronómio': 'deuteronomy',
 
   // Antigo Testamento - Históricos
   'Josué': 'joshua',
@@ -51,7 +53,9 @@ const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
   '1 Reis': '1 kings',
   '2 Reis': '2 kings',
   '1 Crônicas': '1 chronicles',
+  '1 Crónicas': '1 chronicles',
   '2 Crônicas': '2 chronicles',
+  '2 Crónicas': '2 chronicles',
   'Esdras': 'ezra',
   'Neemias': 'nehemiah',
   'Ester': 'esther',
@@ -62,6 +66,7 @@ const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
   'Provérbios': 'proverbs',
   'Eclesiastes': 'ecclesiastes',
   'Cântico dos Cânticos': 'song of songs',
+  'Cânticos': 'song of songs',
 
   // Antigo Testamento - Profetas Maiores
   'Isaías': 'isaiah',
@@ -72,9 +77,11 @@ const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
 
   // Antigo Testamento - Profetas Menores
   'Oséias': 'hosea',
+  'Oseias': 'hosea',
   'Joel': 'joel',
   'Amós': 'amos',
   'Obadias': 'obadiah',
+  'Abdias': 'obadiah',
   'Jonas': 'jonah',
   'Miqueias': 'micah',
   'Naum': 'nahum',
@@ -107,6 +114,7 @@ const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
   '2 Timóteo': '2 timothy',
   'Tito': 'titus',
   'Filemom': 'philemon',
+  'Filémon': 'philemon',
 
   // Novo Testamento - Hebreus e Epístolas Gerais
   'Hebreus': 'hebrews',
