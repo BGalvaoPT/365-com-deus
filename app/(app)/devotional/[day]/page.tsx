@@ -359,13 +359,11 @@ export default function DevotionalPage() {
       )}
 
       {/* Share Card */}
-      {hasFullContent && (
-        <ShareCard
-          verse={keyVerse}
-          reference={devotional.passage}
-          version="ACF"
-        />
-      )}
+      <ShareCard
+        verse={keyVerse}
+        reference={devotional.passage}
+        version="ACF"
+      />
 
       {/* Ações */}
       <div className="flex gap-3 mb-6">
@@ -394,19 +392,6 @@ export default function DevotionalPage() {
         )}
       </div>
 
-      {/* Botão de Áudio (desabilitado por enquanto) */}
-      <div className="mb-6">
-        <button
-          disabled
-          className="w-full py-3 px-4 flex items-center justify-center gap-2 text-parchment-400 dark:text-neutral-600 bg-parchment-100 dark:bg-neutral-800 border border-parchment-200 dark:border-neutral-700 rounded-xl cursor-not-allowed opacity-60"
-          title="Esta funcionalidade virá em breve"
-        >
-          <span className="text-sm">Ouvir</span>
-          <span className="text-xs text-parchment-500 dark:text-neutral-500">
-            Em breve
-          </span>
-        </button>
-      </div>
 
       {/* Navegação entre dias */}
       <div className="flex justify-between items-center mb-6">

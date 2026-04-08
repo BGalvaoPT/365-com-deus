@@ -146,16 +146,15 @@ export function useUserData() {
     [userId, supabase]
   );
 
-  // Calcular dia actual baseado na data de início
+  // Calcular dia actual baseado no dia do ano (1 Jan = dia 1, 31 Dez = dia 365)
   const getCurrentDay = useCallback(() => {
-    if (!profile?.start_date) return 1;
-    const start = new Date(profile.start_date);
     const now = new Date();
-    const diff = Math.floor(
-      (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.min(Math.max(diff + 1, 1), 365);
-  }, [profile]);
+    const startOfYear = new Date(now.getFullYear(), 0, 0);
+    const diff = now.getTime() - startOfYear.getTime();
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay);
+    return Math.min(Math.max(dayOfYear, 1), 365);
+  }, []);
 
   // Obter dias perdidos
   const getMissedDays = useCallback(() => {
