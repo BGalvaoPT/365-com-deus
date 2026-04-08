@@ -169,21 +169,59 @@ function parsePortugueseReference(reference: string): {
   // Remove espaços extras
   const normalized = reference.trim();
 
-  // Regex para capturar: "Livro Capítulo:Verso" ou "Livro Capítulo:Verso-Verso"
-  // Suporta também "–" (travessão) além de "-"
-  const match = normalized.match(
-    /^(.+?)\s+(\d+)(?::(\d+))?(?:(?:[-–])(\d+))?$/
+  // Padrão 1: "Livro Cap:Verso-Verso" (dentro do mesmo capítulo)
+  const singleChapterMatch = normalized.match(
+    /^(.+?)\s+(\d+):(\d+)(?:[-–](\d+))?$/
   );
 
-  if (!match) {
+  // Padrão 2: "Livro Cap:Verso-Cap:Verso" (entre capítulos, ex: "Génesis 1:1–2:3")
+  const multiChapterMatch = normalized.match(
+    /^(.+?)\s+(\d+):(\d+)[-–](\d+):(\d+)$/
+  );
+
+  // Padrão 3: "Livro Cap:Verso-Livro Cap:Verso" ou "Livro Cap-Cap" (intervalos simples de capítulos)
+  // Ex: "Romanos 1:1-Filémon 1:25" ou "Salmos 42:1-43:5"
+  const chapterRangeMatch = normalized.match(
+    /^(.+?)\s+(\d+)(?::(\d+))?[-–](.+?)$/
+  );
+
+  // Padrão 4: "Livro Cap" (capítulo inteiro, sem versículo)
+  const chapterOnlyMatch = normalized.match(
+    /^(.+?)\s+(\d+)$/
+  );
+
+  let bookName: string;
+  let chapter: number;
+  let startVerse: number | undefined;
+  let endVerse: number | undefined;
+
+  if (singleChapterMatch && !multiChapterMatch) {
+    // "João 3:16" ou "João 3:16-18"
+    bookName = singleChapterMatch[1].trim();
+    chapter = parseInt(singleChapterMatch[2], 10);
+    startVerse = parseInt(singleChapterMatch[3], 10);
+    endVerse = singleChapterMatch[4] ? parseInt(singleChapterMatch[4], 10) : undefined;
+  } else if (multiChapterMatch) {
+    // "Génesis 1:1-2:3" → buscar apenas o primeiro capítulo (Cap 1:1 até fim do capítulo)
+    bookName = multiChapterMatch[1].trim();
+    chapter = parseInt(multiChapterMatch[2], 10);
+    startVerse = parseInt(multiChapterMatch[3], 10);
+    endVerse = undefined; // Buscar até ao fim do capítulo
+  } else if (chapterRangeMatch) {
+    // "1 Coríntios 8:1-10:33" ou "Romanos 1:1-Filémon 1:25"
+    // → buscar apenas o primeiro capítulo mencionado
+    bookName = chapterRangeMatch[1].trim();
+    chapter = parseInt(chapterRangeMatch[2], 10);
+    startVerse = chapterRangeMatch[3] ? parseInt(chapterRangeMatch[3], 10) : undefined;
+    endVerse = undefined;
+  } else if (chapterOnlyMatch) {
+    // "Salmos 23" → buscar capítulo inteiro
+    bookName = chapterOnlyMatch[1].trim();
+    chapter = parseInt(chapterOnlyMatch[2], 10);
+  } else {
     console.error(`Referência bíblica inválida: ${reference}`);
     return null;
   }
-
-  const bookName = match[1].trim();
-  const chapter = parseInt(match[2], 10);
-  const startVerse = match[3] ? parseInt(match[3], 10) : undefined;
-  const endVerse = match[4] ? parseInt(match[4], 10) : undefined;
 
   // Procura o nome do livro no mapeamento
   const englishBook = PORTUGUESE_BOOK_MAPPING[bookName];
