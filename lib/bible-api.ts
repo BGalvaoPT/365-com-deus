@@ -1,0 +1,516 @@
+/**
+ * Integração com APIs de Bíblia para o aplicativo devotional "365 com Deus"
+ *
+ * Este módulo fornece acesso a textos bíblicos em português através de múltiplas APIs:
+ * - Bible API (https://bible-api.com/) - API primária
+ * - Bolls.life (https://bolls.life/) - API secundária
+ *
+ * Suporta múltiplas versões em português e implementa cache em memória
+ * para otimizar chamadas à API.
+ */
+
+/**
+ * Tipos exportados para uso em toda a aplicação
+ */
+
+export type BibleVersion = 'ARC' | 'NVI' | 'ARA' | 'ACF';
+
+export interface BibleVerse {
+  book: string;
+  chapter: number;
+  verse: number;
+  text: string;
+}
+
+export interface BiblePassage {
+  reference: string;
+  version: BibleVersion;
+  text: string;
+  verses: BibleVerse[];
+  source: 'bible-api' | 'bolls-life';
+}
+
+/**
+ * Mapeamento de nomes de livros em português para formato de API
+ * Inclui todas as 66 livros da Bíblia
+ */
+const PORTUGUESE_BOOK_MAPPING: Record<string, string> = {
+  // Antigo Testamento - Pentateuco
+  'Gênesis': 'genesis',
+  'Êxodo': 'exodus',
+  'Levítico': 'leviticus',
+  'Números': 'numbers',
+  'Deuteronômio': 'deuteronomy',
+
+  // Antigo Testamento - Históricos
+  'Josué': 'joshua',
+  'Juízes': 'judges',
+  'Rute': 'ruth',
+  '1 Samuel': '1 samuel',
+  '2 Samuel': '2 samuel',
+  '1 Reis': '1 kings',
+  '2 Reis': '2 kings',
+  '1 Crônicas': '1 chronicles',
+  '2 Crônicas': '2 chronicles',
+  'Esdras': 'ezra',
+  'Neemias': 'nehemiah',
+  'Ester': 'esther',
+
+  // Antigo Testamento - Poéticos
+  'Jó': 'job',
+  'Salmos': 'psalms',
+  'Provérbios': 'proverbs',
+  'Eclesiastes': 'ecclesiastes',
+  'Cântico dos Cânticos': 'song of songs',
+
+  // Antigo Testamento - Profetas Maiores
+  'Isaías': 'isaiah',
+  'Jeremias': 'jeremiah',
+  'Lamentações': 'lamentations',
+  'Ezequiel': 'ezekiel',
+  'Daniel': 'daniel',
+
+  // Antigo Testamento - Profetas Menores
+  'Oséias': 'hosea',
+  'Joel': 'joel',
+  'Amós': 'amos',
+  'Obadias': 'obadiah',
+  'Jonas': 'jonah',
+  'Miqueias': 'micah',
+  'Naum': 'nahum',
+  'Habacuque': 'habakkuk',
+  'Sofonias': 'zephaniah',
+  'Ageu': 'haggai',
+  'Zacarias': 'zechariah',
+  'Malaquias': 'malachi',
+
+  // Novo Testamento - Evangelhos
+  'Mateus': 'matthew',
+  'Marcos': 'mark',
+  'Lucas': 'luke',
+  'João': 'john',
+
+  // Novo Testamento - Histórico
+  'Atos': 'acts',
+
+  // Novo Testamento - Epístolas de Paulo
+  'Romanos': 'romans',
+  '1 Coríntios': '1 corinthians',
+  '2 Coríntios': '2 corinthians',
+  'Gálatas': 'galatians',
+  'Efésios': 'ephesians',
+  'Filipenses': 'philippians',
+  'Colossenses': 'colossians',
+  '1 Tessalonicenses': '1 thessalonians',
+  '2 Tessalonicenses': '2 thessalonians',
+  '1 Timóteo': '1 timothy',
+  '2 Timóteo': '2 timothy',
+  'Tito': 'titus',
+  'Filemom': 'philemon',
+
+  // Novo Testamento - Hebreus e Epístolas Gerais
+  'Hebreus': 'hebrews',
+  'Tiago': 'james',
+  '1 Pedro': '1 peter',
+  '2 Pedro': '2 peter',
+  '1 João': '1 john',
+  '2 João': '2 john',
+  '3 João': '3 john',
+  'Judas': 'jude',
+
+  // Novo Testamento - Apocalipse
+  'Apocalipse': 'revelation',
+};
+
+/**
+ * Cache em memória para armazenar passagens já fetchadas
+ * Estrutura: { chave: "livro-capitulo-versiculo-versao" => passagem }
+ */
+const passageCache: Map<string, BiblePassage> = new Map();
+
+/**
+ * Versões disponíveis da Bíblia
+ */
+const AVAILABLE_VERSIONS: BibleVersion[] = ['ARC', 'NVI', 'ARA', 'ACF'];
+
+/**
+ * Mapeamento de versões para códigos de API
+ * Bible-API usa códigos específicos para cada versão
+ */
+const VERSION_API_MAPPING: Record<BibleVersion, string> = {
+  'ARC': 'almeida',  // Almeida Revista e Corrigida
+  'NVI': 'nvi',      // Nova Versão Internacional
+  'ARA': 'ara',      // Almeida Revista e Atualizada
+  'ACF': 'acf',      // Almeida Corrigida Fiel
+};
+
+/**
+ * Parseia uma referência bíblica em português e extrai os componentes
+ *
+ * Exemplos:
+ * - "Gênesis 1:1" => { book: "genesis", chapter: 1, verse: 1 }
+ * - "João 3:16–18" => { book: "john", chapter: 3, startVerse: 16, endVerse: 18 }
+ * - "Romanos 3:21-31" => { book: "romans", chapter: 3, startVerse: 21, endVerse: 31 }
+ */
+function parsePortugueseReference(reference: string): {
+  book: string;
+  chapter: number;
+  startVerse?: number;
+  endVerse?: number;
+} | null {
+  // Remove espaços extras
+  const normalized = reference.trim();
+
+  // Regex para capturar: "Livro Capítulo:Verso" ou "Livro Capítulo:Verso-Verso"
+  // Suporta também "–" (travessão) além de "-"
+  const match = normalized.match(
+    /^(.+?)\s+(\d+)(?::(\d+))?(?:(?:[-–])(\d+))?$/
+  );
+
+  if (!match) {
+    console.error(`Referência bíblica inválida: ${reference}`);
+    return null;
+  }
+
+  const bookName = match[1].trim();
+  const chapter = parseInt(match[2], 10);
+  const startVerse = match[3] ? parseInt(match[3], 10) : undefined;
+  const endVerse = match[4] ? parseInt(match[4], 10) : undefined;
+
+  // Procura o nome do livro no mapeamento
+  const englishBook = PORTUGUESE_BOOK_MAPPING[bookName];
+  if (!englishBook) {
+    console.error(`Livro bíblico não encontrado: ${bookName}`);
+    return null;
+  }
+
+  return {
+    book: englishBook,
+    chapter,
+    startVerse,
+    endVerse,
+  };
+}
+
+/**
+ * Formata a chave de cache para uma passagem
+ */
+function getCacheKey(
+  reference: string,
+  version: BibleVersion
+): string {
+  return `${reference.toLowerCase()}-${version}`;
+}
+
+/**
+ * Tenta buscar uma passagem da Bible API (API primária)
+ *
+ * @param parsedRef - Referência parseada contendo livro, capítulo, verso
+ * @param version - Versão da Bíblia desejada
+ * @returns Passagem ou null se não encontrada
+ */
+async function fetchFromBibleApi(
+  parsedRef: ReturnType<typeof parsePortugueseReference>,
+  version: BibleVersion
+): Promise<BiblePassage | null> {
+  if (!parsedRef) return null;
+
+  try {
+    const apiVersion = VERSION_API_MAPPING[version];
+
+    // Construir a referência no formato da API: "genesis 1:1"
+    let apiReference = `${parsedRef.book} ${parsedRef.chapter}`;
+    if (parsedRef.startVerse !== undefined) {
+      apiReference += `:${parsedRef.startVerse}`;
+      if (parsedRef.endVerse !== undefined) {
+        apiReference += `-${parsedRef.endVerse}`;
+      }
+    }
+
+    const response = await fetch(
+      `https://bible-api.com/${apiReference}?translation=${apiVersion}`
+    );
+
+    if (!response.ok) {
+      console.warn(
+        `Bible API retornou status ${response.status} para ${apiReference}`
+      );
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (!data.text || !data.verses) {
+      return null;
+    }
+
+    return {
+      reference: data.reference,
+      version,
+      text: data.text,
+      verses: data.verses.map((v: any) => ({
+        book: v.book_name,
+        chapter: v.chapter,
+        verse: v.verse,
+        text: v.text,
+      })),
+      source: 'bible-api',
+    };
+  } catch (error) {
+    console.error(`Erro ao buscar da Bible API:`, error);
+    return null;
+  }
+}
+
+/**
+ * Tenta buscar uma passagem do Bolls.life (API secundária)
+ *
+ * @param parsedRef - Referência parseada
+ * @param version - Versão da Bíblia desejada
+ * @returns Passagem ou null se não encontrada
+ */
+async function fetchFromBollsLife(
+  parsedRef: ReturnType<typeof parsePortugueseReference>,
+  version: BibleVersion
+): Promise<BiblePassage | null> {
+  if (!parsedRef) return null;
+
+  try {
+    // Bolls.life usa um formato de ID específico para cada versão
+    // Para português, usamos códigos como 'pt_BRA-NVI', 'pt_BRA-ARC', etc.
+    const versionMapping: Record<BibleVersion, string> = {
+      'ARC': 'pt_BRA-ARC',
+      'NVI': 'pt_BRA-NVI',
+      'ARA': 'pt_BRA-ARA',
+      'ACF': 'pt_BRA-ACF',
+    };
+
+    const apiVersion = versionMapping[version];
+
+    // Construir referência: "1/1/1" para Gênesis 1:1
+    const bookIndex = getBookIndex(parsedRef.book);
+    if (bookIndex === -1) {
+      return null;
+    }
+
+    let endpoint = `https://bolls.life/get-text/${apiVersion}/${bookIndex}/${parsedRef.chapter}/`;
+
+    if (parsedRef.startVerse !== undefined) {
+      endpoint += `${parsedRef.startVerse}`;
+      if (parsedRef.endVerse !== undefined) {
+        endpoint += `-${parsedRef.endVerse}`;
+      }
+    }
+
+    const response = await fetch(endpoint);
+
+    if (!response.ok) {
+      console.warn(
+        `Bolls.life retornou status ${response.status}`
+      );
+      return null;
+    }
+
+    const data = await response.json();
+
+    if (!data.text) {
+      return null;
+    }
+
+    // Processar resposta do Bolls.life
+    const verses: BibleVerse[] = [];
+    const textParts: string[] = [];
+
+    if (Array.isArray(data.text)) {
+      data.text.forEach((item: any) => {
+        verses.push({
+          book: parsedRef.book,
+          chapter: parsedRef.chapter,
+          verse: item.verse,
+          text: item.text,
+        });
+        textParts.push(item.text);
+      });
+    }
+
+    return {
+      reference: `${parsedRef.book} ${parsedRef.chapter}:${parsedRef.startVerse || ''}`,
+      version,
+      text: textParts.join(' '),
+      verses,
+      source: 'bolls-life',
+    };
+  } catch (error) {
+    console.error(`Erro ao buscar do Bolls.life:`, error);
+    return null;
+  }
+}
+
+/**
+ * Obtém o índice de um livro para uso na API Bolls.life
+ * Os livros são numerados de 1 a 66
+ */
+function getBookIndex(englishBookName: string): number {
+  const bookOrder = [
+    'genesis', 'exodus', 'leviticus', 'numbers', 'deuteronomy',
+    'joshua', 'judges', 'ruth', '1 samuel', '2 samuel', '1 kings', '2 kings',
+    '1 chronicles', '2 chronicles', 'ezra', 'nehemiah', 'esther', 'job',
+    'psalms', 'proverbs', 'ecclesiastes', 'song of songs', 'isaiah',
+    'jeremiah', 'lamentations', 'ezekiel', 'daniel', 'hosea', 'joel',
+    'amos', 'obadiah', 'jonah', 'micah', 'nahum', 'habakkuk',
+    'zephaniah', 'haggai', 'zechariah', 'malachi', 'matthew',
+    'mark', 'luke', 'john', 'acts', 'romans', '1 corinthians',
+    '2 corinthians', 'galatians', 'ephesians', 'philippians',
+    'colossians', '1 thessalonians', '2 thessalonians', '1 timothy',
+    '2 timothy', 'titus', 'philemon', 'hebrews', 'james',
+    '1 peter', '2 peter', '1 john', '2 john', '3 john', 'jude',
+    'revelation'
+  ];
+
+  const index = bookOrder.indexOf(englishBookName.toLowerCase());
+  return index >= 0 ? index + 1 : -1;
+}
+
+/**
+ * Busca uma passagem bíblica em português
+ *
+ * Implementa fallback automático entre APIs e usa cache em memória
+ * para otimizar chamadas repetidas.
+ *
+ * @param passage - Referência bíblica em português (ex: "João 3:16")
+ * @param version - Versão desejada (padrão: "ARC")
+ * @returns Promise com a passagem ou null se não encontrada
+ *
+ * @example
+ * const verse = await fetchPassage("João 3:16");
+ * console.log(verse?.text);
+ */
+export async function fetchPassage(
+  passage: string,
+  version: BibleVersion = 'ARC'
+): Promise<BiblePassage | null> {
+  // Validar entrada
+  if (!passage || passage.trim().length === 0) {
+    console.error('Referência bíblica vazia');
+    return null;
+  }
+
+  if (!AVAILABLE_VERSIONS.includes(version)) {
+    console.warn(`Versão ${version} não suportada, usando ARC`);
+  }
+
+  // Verificar cache
+  const cacheKey = getCacheKey(passage, version);
+  if (passageCache.has(cacheKey)) {
+    return passageCache.get(cacheKey)!;
+  }
+
+  // Parsear referência
+  const parsedRef = parsePortugueseReference(passage);
+  if (!parsedRef) {
+    return null;
+  }
+
+  // Tentar buscar da API primária (Bible API)
+  let result = await fetchFromBibleApi(parsedRef, version);
+
+  // Se falhar, tentar API secundária (Bolls.life)
+  if (!result) {
+    console.info(
+      `Fallback para Bolls.life para ${passage} (versão ${version})`
+    );
+    result = await fetchFromBollsLife(parsedRef, version);
+  }
+
+  // Se ainda assim falhar, tentar novamente com versão padrão
+  if (!result && version !== 'ARC') {
+    console.info(
+      `Fallback para versão ARC para ${passage}`
+    );
+    result = await fetchFromBibleApi(parsedRef, 'ARC');
+  }
+
+  // Armazenar em cache se obteve resultado
+  if (result) {
+    passageCache.set(cacheKey, result);
+  }
+
+  return result;
+}
+
+/**
+ * Retorna as versões disponíveis da Bíblia
+ *
+ * @returns Array com as versões suportadas
+ */
+export function getAvailableVersions(): BibleVersion[] {
+  return [...AVAILABLE_VERSIONS];
+}
+
+/**
+ * Obtém informações sobre uma versão específica
+ *
+ * @param version - Versão desejada
+ * @returns Descrição da versão
+ */
+export function getVersionInfo(version: BibleVersion): string {
+  const info: Record<BibleVersion, string> = {
+    'ARC': 'Almeida Revista e Corrigida (clássica)',
+    'NVI': 'Nova Versão Internacional (contemporânea)',
+    'ARA': 'Almeida Revista e Atualizada (transitória)',
+    'ACF': 'Almeida Corrigida Fiel (literal)',
+  };
+
+  return info[version] || 'Versão desconhecida';
+}
+
+/**
+ * Limpa o cache de passagens (útil para testes ou liberação de memória)
+ */
+export function clearPassageCache(): void {
+  passageCache.clear();
+}
+
+/**
+ * Retorna o tamanho atual do cache
+ *
+ * @returns Número de passagens em cache
+ */
+export function getCacheSize(): number {
+  return passageCache.size;
+}
+
+/**
+ * Pré-carrega um conjunto de passagens comuns no cache
+ * Útil para otimizar a experiência do usuário ao iniciar a aplicação
+ *
+ * @param passages - Array de referências em português
+ * @param version - Versão desejada
+ */
+export async function preloadPassages(
+  passages: string[],
+  version: BibleVersion = 'ARC'
+): Promise<void> {
+  const promises = passages.map(passage => fetchPassage(passage, version));
+  await Promise.all(promises);
+}
+
+/**
+ * Hook para buscar múltiplas passagens em paralelo
+ *
+ * @param passages - Array de referências
+ * @param version - Versão desejada
+ * @returns Promise com array de passagens
+ */
+export async function fetchMultiplePassages(
+  passages: string[],
+  version: BibleVersion = 'ARC'
+): Promise<(BiblePassage | null)[]> {
+  const results = await Promise.allSettled(
+    passages.map(passage => fetchPassage(passage, version))
+  );
+
+  return results.map(result =>
+    result.status === 'fulfilled' ? result.value : null
+  );
+}
