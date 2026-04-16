@@ -7,6 +7,7 @@ import { getDevotional } from "@/data/devotionals";
 import { Toast } from "@/components/Toast";
 import { BibleReader } from "@/components/BibleReader";
 import { ShareCard } from "@/components/ShareCard";
+import { fetchPassage } from "@/lib/bible-api";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -17,6 +18,7 @@ import {
   ShareIcon,
   BookIcon,
   BibleIcon,
+  ChevronDownIcon,
 } from "@/components/Icons";
 import Link from "next/link";
 
@@ -51,6 +53,7 @@ export default function DevotionalPage() {
   const [favorites, setFavorites] = useState<number[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [fetchedVerse, setFetchedVerse] = useState<string | null>(null);
 
   // Carregar notas existentes
   useEffect(() => {
@@ -77,6 +80,33 @@ export default function DevotionalPage() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  // Buscar o primeiro versículo real da passagem para o cartão de partilha
+  useEffect(() => {
+    if (!devotional?.passage) return;
+    let cancelled = false;
+
+    fetchPassage(devotional.passage, "ACF")
+      .then((result) => {
+        if (cancelled) return;
+        if (result && result.verses && result.verses.length > 0) {
+          // Usar os primeiros 1-2 versículos (máx ~200 caracteres)
+          let combined = "";
+          for (const v of result.verses) {
+            if (combined.length + v.text.length > 200) break;
+            combined += (combined ? " " : "") + v.text.trim();
+          }
+          setFetchedVerse(combined || result.verses[0].text.trim());
+        }
+      })
+      .catch(() => {
+        /* silent fallback */
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [devotional?.passage]);
 
   if (loading) {
     return (
@@ -147,11 +177,10 @@ export default function DevotionalPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Extrair um versículo-chave (primeiras 120 caracteres da explicação ou contexto)
-  const keyVerse =
-    devotional.explanation?.substring(0, 120).trim() ||
-    devotional.context?.substring(0, 120).trim() ||
-    devotional.passage;
+  // Versículo para o cartão de partilha:
+  // 1º) Versículo real da Bíblia (se carregado da API)
+  // 2º) Fallback: o título do devocional
+  const keyVerse = fetchedVerse || devotional.title;
 
   // Calcular progresso
   const progressPercentage = (day / 365) * 100;
@@ -358,26 +387,20 @@ export default function DevotionalPage() {
         </div>
       )}
 
-      {/* Share Card */}
-      <ShareCard
-        verse={keyVerse}
-        reference={devotional.passage}
-        version="ACF"
-      />
-
-      {/* Ações */}
+      {/* Ações principais — Concluir Devocional destacado */}
       <div className="flex gap-3 mb-6">
         {!isCompleted ? (
           <button
             onClick={handleComplete}
             disabled={completing}
-            className="btn-success flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+            className="btn-success flex-1 flex items-center justify-center gap-2 disabled:opacity-50 text-base py-4"
           >
-            <CheckIcon size={18} />
+            <CheckIcon size={20} />
             {completing ? "A concluir..." : "Concluir Devocional"}
           </button>
         ) : (
-          <div className="flex-1 py-4 px-6 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-center font-semibold text-[15px]">
+          <div className="flex-1 py-4 px-6 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-center font-semibold text-[15px] flex items-center justify-center gap-2">
+            <CheckIcon size={18} />
             Concluído
           </div>
         )}
@@ -389,6 +412,38 @@ export default function DevotionalPage() {
           >
             <EditIcon size={18} />
           </button>
+        )}
+      </div>
+
+      {/* Partilhar — secção colapsável */}
+      <div className="mb-6">
+        <button
+          onClick={() => setShowShare(!showShare)}
+          className="w-full flex items-center justify-between gap-2 px-5 py-3 rounded-xl bg-parchment-50 dark:bg-neutral-900 hover:bg-parchment-100 dark:hover:bg-neutral-800 border border-parchment-200 dark:border-neutral-800 transition-colors"
+          aria-expanded={showShare}
+        >
+          <div className="flex items-center gap-2">
+            <ShareIcon size={18} className="text-gold-600 dark:text-gold-500" />
+            <span className="text-sm font-medium text-parchment-800 dark:text-neutral-200">
+              Partilhar este versículo
+            </span>
+          </div>
+          <ChevronDownIcon
+            size={18}
+            className={`text-parchment-500 dark:text-neutral-500 transition-transform duration-200 ${
+              showShare ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+
+        {showShare && (
+          <div className="mt-4 animate-fade-in">
+            <ShareCard
+              verse={keyVerse}
+              reference={devotional.passage}
+              version="ACF"
+            />
+          </div>
         )}
       </div>
 

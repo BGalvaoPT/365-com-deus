@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState } from 'react';
-import { DownloadIcon, CopyIcon, WhatsAppIcon, FacebookIcon, InstagramIcon } from './Icons';
+import { DownloadIcon, CopyIcon, ShareIcon, CheckIcon } from './Icons';
 
 interface ShareCardProps {
   verse: string;
@@ -12,7 +12,16 @@ interface ShareCardProps {
 export function ShareCard({ verse, reference, version }: ShareCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
   const [copied, setCopied] = useState(false);
+  const [canNativeShare, setCanNativeShare] = useState(false);
+
+  useEffect(() => {
+    // Detectar suporte a Web Share API (nativo do iPhone e Android)
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      setCanNativeShare(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -36,28 +45,28 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
       ctx.fillRect(0, 0, width, height);
 
       // Draw top cross icon
-      const crossSize = 40;
+      const crossSize = 50;
       const crossX = width / 2;
-      const crossY = 60;
+      const crossY = 110;
       drawCross(ctx, crossX, crossY, crossSize, goldColor);
 
       // Draw decorative line
       ctx.strokeStyle = goldColor;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(150, 120);
-      ctx.lineTo(width - 150, 120);
+      ctx.moveTo(150, 180);
+      ctx.lineTo(width - 150, 180);
       ctx.stroke();
 
       // Verse text - with text wrapping
-      const verseY = 200;
+      const verseY = 320;
       const maxWidth = width - 120;
-      const lineHeight = 50;
-      ctx.font = 'italic 32px "Georgia", serif';
+      const lineHeight = 60;
+      ctx.font = 'italic 38px "Georgia", serif';
       ctx.fillStyle = textColor;
       ctx.textAlign = 'center';
 
-      const wrappedVerse = wrapText(ctx, verse, maxWidth);
+      const wrappedVerse = wrapText(ctx, `"${verse}"`, maxWidth);
       let currentY = verseY;
       wrappedVerse.forEach((line) => {
         ctx.fillText(line, width / 2, currentY);
@@ -65,32 +74,33 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
       });
 
       // Reference text
-      const referenceY = currentY + 60;
-      ctx.font = 'bold 28px "Georgia", serif';
+      const referenceY = currentY + 80;
+      ctx.font = 'bold 34px "Georgia", serif';
       ctx.fillStyle = goldColor;
       ctx.fillText(reference, width / 2, referenceY);
 
       // Version text
-      ctx.font = '16px "Arial", sans-serif';
+      ctx.font = '20px "Arial", sans-serif';
       ctx.fillStyle = '#999999';
       ctx.fillText(version, width / 2, referenceY + 40);
-
-      // Bottom branding
-      ctx.font = 'bold 24px "Georgia", serif';
-      ctx.fillStyle = goldColor;
-      ctx.fillText('365 com Deus', width / 2, height - 80);
 
       // Decorative bottom line
       ctx.strokeStyle = goldColor;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(150, height - 120);
-      ctx.lineTo(width - 150, height - 120);
+      ctx.moveTo(150, height - 160);
+      ctx.lineTo(width - 150, height - 160);
       ctx.stroke();
+
+      // Bottom branding
+      ctx.font = 'bold 28px "Georgia", serif';
+      ctx.fillStyle = goldColor;
+      ctx.fillText('365 com Deus', width / 2, height - 100);
 
       // Convert canvas to blob URL
       canvas.toBlob((blob) => {
         if (blob) {
+          setImageBlob(blob);
           const url = URL.createObjectURL(blob);
           setShareUrl(url);
         }
@@ -130,7 +140,7 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
     color: string
   ) => {
     context.strokeStyle = color;
-    context.lineWidth = 4;
+    context.lineWidth = 5;
     context.lineCap = 'round';
 
     // Vertical line
@@ -147,127 +157,120 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
   };
 
   const downloadImage = () => {
-    if (!shareUrl || !canvasRef.current) return;
+    if (!shareUrl) return;
 
     const link = document.createElement('a');
     link.href = shareUrl;
-    link.download = `365-com-deus-${reference.replace(/\s+/g, '-')}.png`;
+    link.download = `365-com-deus-${reference.replace(/\s+/g, '-').replace(/:/g, '-')}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const copyToClipboard = () => {
-    const text = `"${verse}"\n\n${reference} - ${version}\n\n365 com Deus`;
+    const text = `"${verse}"\n\n${reference} — ${version}\n\n— 365 com Deus`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2500);
     });
   };
 
-  const shareOnWhatsApp = () => {
-    const text = encodeURIComponent(
-      `"${verse}"\n\n${reference} - ${version}\n\n365 com Deus`
-    );
-    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-  };
+  const nativeShare = async () => {
+    if (!imageBlob) return;
 
-  const shareOnFacebook = () => {
-    const quote = encodeURIComponent(`"${verse}"\n\n${reference} - ${version}`);
-    window.open(
-      `https://www.facebook.com/sharer/sharer.php?quote=${quote}&hashtag=%23365ComDeus`,
-      '_blank'
-    );
-  };
+    const shareText = `"${verse}"\n\n${reference} — ${version}\n\n— 365 com Deus`;
 
-  const shareOnInstagram = () => {
-    // Instagram doesn't support direct web sharing
-    // Instead, we download the image with instructions
-    downloadImage();
-    alert('Imagem baixada! Abra o Instagram e partilhe a imagem do seu dispositivo.');
+    try {
+      // Tentar partilhar com imagem e texto
+      const file = new File([imageBlob], '365-com-deus.png', { type: 'image/png' });
+      const shareData: ShareData = {
+        title: '365 com Deus',
+        text: shareText,
+      };
+
+      // Alguns browsers suportam partilhar ficheiros
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        shareData.files = [file];
+      }
+
+      await navigator.share(shareData);
+    } catch (err) {
+      // Utilizador cancelou ou erro — sem ação
+      if ((err as Error).name !== 'AbortError') {
+        console.error('Erro ao partilhar:', err);
+      }
+    }
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Canvas for generating the image */}
+    <div className="flex flex-col gap-4">
+      {/* Canvas para gerar a imagem (escondido) */}
       <div className="hidden">
         <canvas ref={canvasRef} />
       </div>
 
-      {/* Preview of the share image */}
+      {/* Preview da imagem */}
       {shareUrl && (
         <div className="flex justify-center">
           <img
             src={shareUrl}
             alt="Imagem para partilhar"
-            className="w-full max-w-sm rounded-lg shadow-lg"
+            className="w-full max-w-xs rounded-xl shadow-lg"
           />
         </div>
       )}
 
-      {/* Share buttons */}
-      <div className="flex flex-col gap-3">
-        <p className="text-sm font-semibold text-gray-700 text-center">Partilhar este versículo</p>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {/* Copy to Clipboard */}
-          <button
-            onClick={copyToClipboard}
-            className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-gray-200 hover:bg-gray-300 transition-colors text-gray-800 font-medium text-sm"
-            title="Copiar para área de transferência"
-          >
-            <CopyIcon size={18} />
-            <span className="hidden sm:inline">Copiar</span>
-          </button>
-
-          {/* Download Image */}
-          <button
-            onClick={downloadImage}
-            className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-blue-600 hover:bg-blue-700 transition-colors text-white font-medium text-sm"
-            title="Descarregar imagem"
-          >
-            <DownloadIcon size={18} />
-            <span className="hidden sm:inline">Descarregar</span>
-          </button>
-
-          {/* WhatsApp Share */}
-          <button
-            onClick={shareOnWhatsApp}
-            className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-green-500 hover:bg-green-600 transition-colors text-white font-medium text-sm"
-            title="Partilhar no WhatsApp"
-          >
-            <WhatsAppIcon size={18} />
-            <span className="hidden sm:inline">WhatsApp</span>
-          </button>
-
-          {/* Facebook Share */}
-          <button
-            onClick={shareOnFacebook}
-            className="flex items-center justify-center gap-2 px-3 py-3 rounded-lg bg-blue-700 hover:bg-blue-800 transition-colors text-white font-medium text-sm"
-            title="Partilhar no Facebook"
-          >
-            <FacebookIcon size={18} />
-            <span className="hidden sm:inline">Facebook</span>
-          </button>
-        </div>
-
-        {/* Instagram Share */}
+      {/* Botões de ação - layout simples e intuitivo */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {/* Copiar texto */}
         <button
-          onClick={shareOnInstagram}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 hover:from-pink-600 hover:via-red-600 hover:to-yellow-600 transition-colors text-white font-medium"
-          title="Partilhar no Instagram"
+          onClick={copyToClipboard}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm"
         >
-          <InstagramIcon size={18} />
-          Partilhar no Instagram
+          {copied ? (
+            <>
+              <CheckIcon size={18} />
+              <span>Copiado!</span>
+            </>
+          ) : (
+            <>
+              <CopyIcon size={18} />
+              <span>Copiar texto</span>
+            </>
+          )}
         </button>
-      </div>
 
-      {/* Copy confirmation message */}
-      {copied && (
-        <div className="text-center text-sm text-green-600 font-medium">
-          Copiado para a área de transferência!
-        </div>
-      )}
+        {/* Guardar imagem */}
+        <button
+          onClick={downloadImage}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm"
+        >
+          <DownloadIcon size={18} />
+          <span>Guardar imagem</span>
+        </button>
+
+        {/* Partilhar (nativo) */}
+        {canNativeShare ? (
+          <button
+            onClick={nativeShare}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold-600 hover:bg-gold-700 text-white font-semibold text-sm transition-colors shadow-sm"
+          >
+            <ShareIcon size={18} />
+            <span>Partilhar</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              // Fallback: copiar e informar
+              copyToClipboard();
+            }}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold-600 hover:bg-gold-700 text-white font-semibold text-sm transition-colors shadow-sm"
+          >
+            <ShareIcon size={18} />
+            <span>Partilhar</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -296,25 +299,19 @@ export function generateShareImage(
     const goldColor = '#b8923e';
     const textColor = '#ffffff';
 
-    // Fill background
     ctx.fillStyle = bgColor;
     ctx.fillRect(0, 0, width, height);
 
-    // Draw top cross icon
-    const crossSize = 40;
-    const crossX = width / 2;
-    const crossY = 60;
-    drawCrossHelper(ctx, crossX, crossY, crossSize, goldColor);
+    const crossSize = 50;
+    drawCrossHelper(ctx, width / 2, 110, crossSize, goldColor);
 
-    // Draw decorative line
     ctx.strokeStyle = goldColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(150, 120);
-    ctx.lineTo(width - 150, 120);
+    ctx.moveTo(150, 180);
+    ctx.lineTo(width - 150, 180);
     ctx.stroke();
 
-    // Helper function for wrapping text
     const wrapTextHelper = (
       context: CanvasRenderingContext2D,
       text: string,
@@ -343,44 +340,39 @@ export function generateShareImage(
       return lines;
     };
 
-    // Verse text
-    const verseY = 200;
+    const verseY = 320;
     const maxWidth = width - 120;
-    const lineHeight = 50;
-    ctx.font = 'italic 32px "Georgia", serif';
+    const lineHeight = 60;
+    ctx.font = 'italic 38px "Georgia", serif';
     ctx.fillStyle = textColor;
     ctx.textAlign = 'center';
 
-    const wrappedVerse = wrapTextHelper(ctx, verse, maxWidth);
+    const wrappedVerse = wrapTextHelper(ctx, `"${verse}"`, maxWidth);
     let currentY = verseY;
     wrappedVerse.forEach((line) => {
       ctx.fillText(line, width / 2, currentY);
       currentY += lineHeight;
     });
 
-    // Reference text
-    const referenceY = currentY + 60;
-    ctx.font = 'bold 28px "Georgia", serif';
+    const referenceY = currentY + 80;
+    ctx.font = 'bold 34px "Georgia", serif';
     ctx.fillStyle = goldColor;
     ctx.fillText(reference, width / 2, referenceY);
 
-    // Version text
-    ctx.font = '16px "Arial", sans-serif';
+    ctx.font = '20px "Arial", sans-serif';
     ctx.fillStyle = '#999999';
     ctx.fillText(version, width / 2, referenceY + 40);
 
-    // Bottom branding
-    ctx.font = 'bold 24px "Georgia", serif';
-    ctx.fillStyle = goldColor;
-    ctx.fillText('365 com Deus', width / 2, height - 80);
-
-    // Decorative bottom line
     ctx.strokeStyle = goldColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(150, height - 120);
-    ctx.lineTo(width - 150, height - 120);
+    ctx.moveTo(150, height - 160);
+    ctx.lineTo(width - 150, height - 160);
     ctx.stroke();
+
+    ctx.font = 'bold 28px "Georgia", serif';
+    ctx.fillStyle = goldColor;
+    ctx.fillText('365 com Deus', width / 2, height - 100);
 
     canvas.toBlob((blob) => {
       if (blob) {
@@ -401,16 +393,14 @@ function drawCrossHelper(
   color: string
 ) {
   context.strokeStyle = color;
-  context.lineWidth = 4;
+  context.lineWidth = 5;
   context.lineCap = 'round';
 
-  // Vertical line
   context.beginPath();
   context.moveTo(x, y - size / 2);
   context.lineTo(x, y + size / 2);
   context.stroke();
 
-  // Horizontal line
   context.beginPath();
   context.moveTo(x - size / 3, y - size / 4);
   context.lineTo(x + size / 3, y - size / 4);

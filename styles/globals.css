@@ -101,3 +101,24 @@
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Safe area insets para iPhone (notch e home indicator) */
+@supports (padding: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Standalone PWA — smooth scroll e evitar zoom em inputs */
+@media (display-mode: standalone) {
+  html {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  input, textarea, select {
+    font-size: 16px; /* impede zoom automático no iOS */
+  }
+}
