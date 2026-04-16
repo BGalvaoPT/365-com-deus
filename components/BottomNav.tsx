@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HomeIcon, BookIcon, CalendarIcon, EditIcon } from "./Icons";
+import { HomeIcon, BookIcon, BibleIcon, CalendarIcon, EditIcon } from "./Icons";
 
 const navItems = [
   { href: "/dashboard", icon: HomeIcon, label: "Início" },
   { href: "/devotional/today", icon: BookIcon, label: "Devocional" },
+  { href: "/catecismo", icon: BibleIcon, label: "Catecismo" },
   { href: "/calendar", icon: CalendarIcon, label: "Calendário" },
   { href: "/notes", icon: EditIcon, label: "Notas" },
 ];
@@ -27,14 +28,14 @@ export function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 px-4 py-1 transition-colors ${
+              className={`flex flex-col items-center gap-1 px-2 sm:px-4 py-1 transition-colors ${
                 isActive
                   ? "text-gold-600 dark:text-gold-500"
                   : "text-parchment-400 dark:text-neutral-500"
               }`}
             >
               <item.icon size={20} />
-              <span className="text-[11px]">{item.label}</span>
+              <span className="text-[10px]">{item.label}</span>
             </Link>
           );
         })}

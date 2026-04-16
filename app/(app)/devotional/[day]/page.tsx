@@ -7,6 +7,7 @@ import { getDevotional } from "@/data/devotionals";
 import { Toast } from "@/components/Toast";
 import { BibleReader } from "@/components/BibleReader";
 import { ShareCard } from "@/components/ShareCard";
+import { CatechismWeek } from "@/components/CatechismWeek";
 import { fetchPassage } from "@/lib/bible-api";
 import {
   ChevronLeftIcon,
@@ -445,6 +446,11 @@ export default function DevotionalPage() {
             />
           </div>
         )}
+      </div>
+
+      {/* Catecismo da semana */}
+      <div className="mb-6">
+        <CatechismWeek day={day} />
       </div>
 
 
