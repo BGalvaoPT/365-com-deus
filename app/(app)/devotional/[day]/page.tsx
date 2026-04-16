@@ -439,8 +439,8 @@ export default function DevotionalPage() {
         {showShare && (
           <div className="mt-4 animate-fade-in">
             <ShareCard
-              verse={keyVerse}
-              reference={devotional.passage}
+              devotional={devotional}
+              verse={fetchedVerse || undefined}
               version="ACF"
             />
           </div>

@@ -1,174 +1,80 @@
 'use client';
 
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DownloadIcon, CopyIcon, ShareIcon, CheckIcon } from './Icons';
+import type { Devotional } from '@/data/devotionals';
 
 interface ShareCardProps {
-  verse: string;
-  reference: string;
-  version: string;
+  devotional: Devotional;
+  verse?: string;
+  version?: string;
 }
 
-export function ShareCard({ verse, reference, version }: ShareCardProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [imageBlob, setImageBlob] = useState<Blob | null>(null);
+/**
+ * Componente de partilha do devocional completo em PDF.
+ * Gera um PDF A4 elegante, com tipografia cuidada e layout organizado.
+ */
+export function ShareCard({ devotional, verse, version = 'ACF' }: ShareCardProps) {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [generating, setGenerating] = useState(true);
   const [copied, setCopied] = useState(false);
   const [canNativeShare, setCanNativeShare] = useState(false);
 
   useEffect(() => {
-    // Detectar suporte a Web Share API (nativo do iPhone e Android)
     if (typeof navigator !== 'undefined' && 'share' in navigator) {
       setCanNativeShare(true);
     }
   }, []);
 
   useEffect(() => {
-    if (canvasRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+    let cancelled = false;
+    let urlToRevoke: string | null = null;
 
-      // Canvas dimensions
-      const width = 1080;
-      const height = 1080;
-      canvas.width = width;
-      canvas.height = height;
-
-      // Colors
-      const bgColor = '#1a1a1a';
-      const goldColor = '#b8923e';
-      const textColor = '#ffffff';
-
-      // Fill background
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, width, height);
-
-      // Draw top cross icon
-      const crossSize = 50;
-      const crossX = width / 2;
-      const crossY = 110;
-      drawCross(ctx, crossX, crossY, crossSize, goldColor);
-
-      // Draw decorative line
-      ctx.strokeStyle = goldColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(150, 180);
-      ctx.lineTo(width - 150, 180);
-      ctx.stroke();
-
-      // Verse text - with text wrapping
-      const verseY = 320;
-      const maxWidth = width - 120;
-      const lineHeight = 60;
-      ctx.font = 'italic 38px "Georgia", serif';
-      ctx.fillStyle = textColor;
-      ctx.textAlign = 'center';
-
-      const wrappedVerse = wrapText(ctx, `"${verse}"`, maxWidth);
-      let currentY = verseY;
-      wrappedVerse.forEach((line) => {
-        ctx.fillText(line, width / 2, currentY);
-        currentY += lineHeight;
-      });
-
-      // Reference text
-      const referenceY = currentY + 80;
-      ctx.font = 'bold 34px "Georgia", serif';
-      ctx.fillStyle = goldColor;
-      ctx.fillText(reference, width / 2, referenceY);
-
-      // Version text
-      ctx.font = '20px "Arial", sans-serif';
-      ctx.fillStyle = '#999999';
-      ctx.fillText(version, width / 2, referenceY + 40);
-
-      // Decorative bottom line
-      ctx.strokeStyle = goldColor;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(150, height - 160);
-      ctx.lineTo(width - 150, height - 160);
-      ctx.stroke();
-
-      // Bottom branding
-      ctx.font = 'bold 28px "Georgia", serif';
-      ctx.fillStyle = goldColor;
-      ctx.fillText('365 com Deus', width / 2, height - 100);
-
-      // Convert canvas to blob URL
-      canvas.toBlob((blob) => {
-        if (blob) {
-          setImageBlob(blob);
-          const url = URL.createObjectURL(blob);
-          setShareUrl(url);
-        }
-      }, 'image/png');
-    }
-  }, [verse, reference, version]);
-
-  const wrapText = (context: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
-    const words = text.split(' ');
-    const lines: string[] = [];
-    let currentLine = '';
-
-    words.forEach((word) => {
-      const testLine = currentLine + (currentLine ? ' ' : '') + word;
-      const metrics = context.measureText(testLine);
-
-      if (metrics.width > maxWidth && currentLine) {
-        lines.push(currentLine);
-        currentLine = word;
-      } else {
-        currentLine = testLine;
+    async function generate() {
+      setGenerating(true);
+      try {
+        const { jsPDF } = await import('jspdf');
+        const blob = buildDevotionalPdf(jsPDF, devotional, verse, version);
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        urlToRevoke = url;
+        setPdfBlob(blob);
+        setPdfUrl(url);
+      } catch (err) {
+        console.error('Erro ao gerar PDF:', err);
+      } finally {
+        if (!cancelled) setGenerating(false);
       }
-    });
-
-    if (currentLine) {
-      lines.push(currentLine);
     }
 
-    return lines;
-  };
+    generate();
 
-  const drawCross = (
-    context: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    size: number,
-    color: string
-  ) => {
-    context.strokeStyle = color;
-    context.lineWidth = 5;
-    context.lineCap = 'round';
+    return () => {
+      cancelled = true;
+      if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
+    };
+  }, [devotional, verse, version]);
 
-    // Vertical line
-    context.beginPath();
-    context.moveTo(x, y - size / 2);
-    context.lineTo(x, y + size / 2);
-    context.stroke();
+  const filename = `365-com-deus-dia-${String(devotional.day).padStart(3, '0')}.pdf`;
 
-    // Horizontal line
-    context.beginPath();
-    context.moveTo(x - size / 3, y - size / 4);
-    context.lineTo(x + size / 3, y - size / 4);
-    context.stroke();
-  };
-
-  const downloadImage = () => {
-    if (!shareUrl) return;
-
+  const downloadPdf = () => {
+    if (!pdfUrl) return;
     const link = document.createElement('a');
-    link.href = shareUrl;
-    link.download = `365-com-deus-${reference.replace(/\s+/g, '-').replace(/:/g, '-')}.png`;
+    link.href = pdfUrl;
+    link.download = filename;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const copyToClipboard = () => {
-    const text = `"${verse}"\n\n${reference} — ${version}\n\n— 365 com Deus`;
+  const copyTextSummary = () => {
+    const text =
+      `📖 365 com Deus — Dia ${devotional.day}\n` +
+      `${devotional.title}\n` +
+      `${devotional.passage} (${version})\n\n` +
+      (verse ? `"${verse}"\n\n` : '') +
+      `— Partilhado de 365 com Deus`;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -176,26 +82,27 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
   };
 
   const nativeShare = async () => {
-    if (!imageBlob) return;
+    if (!pdfBlob) return;
 
-    const shareText = `"${verse}"\n\n${reference} — ${version}\n\n— 365 com Deus`;
+    const shareText =
+      `📖 365 com Deus — Dia ${devotional.day}\n` +
+      `${devotional.title}\n` +
+      `${devotional.passage}` +
+      (verse ? `\n\n"${verse}"` : '');
 
     try {
-      // Tentar partilhar com imagem e texto
-      const file = new File([imageBlob], '365-com-deus.png', { type: 'image/png' });
+      const file = new File([pdfBlob], filename, { type: 'application/pdf' });
       const shareData: ShareData = {
-        title: '365 com Deus',
+        title: `365 com Deus — Dia ${devotional.day}`,
         text: shareText,
       };
 
-      // Alguns browsers suportam partilhar ficheiros
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         shareData.files = [file];
       }
 
       await navigator.share(shareData);
     } catch (err) {
-      // Utilizador cancelou ou erro — sem ação
       if ((err as Error).name !== 'AbortError') {
         console.error('Erro ao partilhar:', err);
       }
@@ -204,28 +111,42 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Canvas para gerar a imagem (escondido) */}
-      <div className="hidden">
-        <canvas ref={canvasRef} />
+      {/* Pré-visualização do PDF */}
+      <div className="flex justify-center">
+        {generating ? (
+          <div className="w-full max-w-xs aspect-[1/1.414] rounded-xl bg-parchment-100 dark:bg-neutral-800 border border-parchment-200 dark:border-neutral-700 flex items-center justify-center animate-pulse">
+            <span className="text-parchment-500 dark:text-neutral-500 text-sm">
+              A preparar PDF…
+            </span>
+          </div>
+        ) : pdfUrl ? (
+          <div className="w-full max-w-xs">
+            <div className="aspect-[1/1.414] rounded-xl overflow-hidden bg-white shadow-lg border border-parchment-200 dark:border-neutral-700">
+              <iframe
+                src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                className="w-full h-full pointer-events-none"
+                title="Pré-visualização do PDF"
+              />
+            </div>
+            <p className="text-center text-xs text-parchment-500 dark:text-neutral-500 mt-2">
+              Dia {devotional.day} · {devotional.passage}
+            </p>
+          </div>
+        ) : (
+          <div className="w-full max-w-xs aspect-[1/1.414] rounded-xl bg-parchment-100 dark:bg-neutral-800 flex items-center justify-center">
+            <span className="text-parchment-500 dark:text-neutral-500 text-sm">
+              Erro ao gerar PDF
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Preview da imagem */}
-      {shareUrl && (
-        <div className="flex justify-center">
-          <img
-            src={shareUrl}
-            alt="Imagem para partilhar"
-            className="w-full max-w-xs rounded-xl shadow-lg"
-          />
-        </div>
-      )}
-
-      {/* Botões de ação - layout simples e intuitivo */}
+      {/* Botões */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {/* Copiar texto */}
         <button
-          onClick={copyToClipboard}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm"
+          onClick={copyTextSummary}
+          disabled={generating}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm disabled:opacity-50"
         >
           {copied ? (
             <>
@@ -235,174 +156,280 @@ export function ShareCard({ verse, reference, version }: ShareCardProps) {
           ) : (
             <>
               <CopyIcon size={18} />
-              <span>Copiar texto</span>
+              <span>Copiar resumo</span>
             </>
           )}
         </button>
 
-        {/* Guardar imagem */}
         <button
-          onClick={downloadImage}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm"
+          onClick={downloadPdf}
+          disabled={generating || !pdfUrl}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-parchment-100 dark:bg-neutral-800 hover:bg-parchment-200 dark:hover:bg-neutral-700 border border-parchment-200 dark:border-neutral-700 transition-colors text-parchment-800 dark:text-neutral-200 font-medium text-sm disabled:opacity-50"
         >
           <DownloadIcon size={18} />
-          <span>Guardar imagem</span>
+          <span>Guardar PDF</span>
         </button>
 
-        {/* Partilhar (nativo) */}
-        {canNativeShare ? (
-          <button
-            onClick={nativeShare}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold-600 hover:bg-gold-700 text-white font-semibold text-sm transition-colors shadow-sm"
-          >
-            <ShareIcon size={18} />
-            <span>Partilhar</span>
-          </button>
-        ) : (
-          <button
-            onClick={() => {
-              // Fallback: copiar e informar
-              copyToClipboard();
-            }}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold-600 hover:bg-gold-700 text-white font-semibold text-sm transition-colors shadow-sm"
-          >
-            <ShareIcon size={18} />
-            <span>Partilhar</span>
-          </button>
-        )}
+        <button
+          onClick={canNativeShare ? nativeShare : downloadPdf}
+          disabled={generating || !pdfBlob}
+          className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gold-600 hover:bg-gold-700 text-white font-semibold text-sm transition-colors shadow-sm disabled:opacity-50"
+        >
+          <ShareIcon size={18} />
+          <span>Partilhar PDF</span>
+        </button>
       </div>
+
+      <p className="text-center text-xs text-parchment-500 dark:text-neutral-500">
+        Um PDF do devocional completo — perfeito para enviar ou imprimir.
+      </p>
     </div>
   );
 }
 
-// Export function to generate share image as a blob URL
-export function generateShareImage(
-  verse: string,
-  reference: string,
-  version: string
-): Promise<string> {
-  return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+/* ------------------------------------------------------------------ */
+/*  Gerador do PDF                                                     */
+/* ------------------------------------------------------------------ */
 
-    if (!ctx) {
-      resolve('');
-      return;
+type JsPDFCtor = typeof import('jspdf').jsPDF;
+type JsPDFInstance = InstanceType<JsPDFCtor>;
+
+function buildDevotionalPdf(
+  JsPdf: JsPDFCtor,
+  d: Devotional,
+  verse: string | undefined,
+  version: string
+): Blob {
+  const doc = new JsPdf({ unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  // Paleta
+  const BG = { r: 26, g: 26, b: 26 };
+  const PARCHMENT = { r: 245, g: 240, b: 232 };
+  const GOLD = { r: 184, g: 146, b: 62 };
+  const INK = { r: 40, g: 35, b: 28 };
+  const MUTED = { r: 110, g: 100, b: 88 };
+
+  const margin = 56;
+  const contentW = pageW - margin * 2;
+
+  // Cabeçalho escuro
+  doc.setFillColor(BG.r, BG.g, BG.b);
+  doc.rect(0, 0, pageW, 220, 'F');
+
+  doc.setDrawColor(GOLD.r, GOLD.g, GOLD.b);
+  doc.setLineWidth(1);
+  doc.line(margin, 60, pageW - margin, 60);
+  doc.line(margin, 200, pageW - margin, 200);
+
+  drawCross(doc, pageW / 2, 90, 18, GOLD);
+
+  doc.setTextColor(GOLD.r, GOLD.g, GOLD.b);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('365 COM DEUS', pageW / 2, 125, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(180, 160, 120);
+  doc.text('Devocional cristão diário', pageW / 2, 142, { align: 'center' });
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`DIA ${d.day} · 365`, pageW / 2, 170, { align: 'center' });
+
+  doc.setFont('times', 'bolditalic');
+  doc.setFontSize(20);
+  doc.setTextColor(255, 255, 255);
+  const titleLines = doc.splitTextToSize(d.title, contentW - 40);
+  let headerY = 192;
+  titleLines.forEach((line: string) => {
+    doc.text(line, pageW / 2, headerY, { align: 'center' });
+    headerY += 22;
+  });
+
+  // Corpo — fundo pergaminho
+  doc.setFillColor(PARCHMENT.r, PARCHMENT.g, PARCHMENT.b);
+  doc.rect(0, 220, pageW, pageH - 220, 'F');
+
+  let y = 260;
+
+  // Banner dourado com referência bíblica
+  doc.setFillColor(GOLD.r, GOLD.g, GOLD.b);
+  doc.roundedRect(margin, y, contentW, 34, 6, 6, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text(`${d.passage}  ·  ${version}`, pageW / 2, y + 22, { align: 'center' });
+  y += 34 + 24;
+
+  // Versículo em destaque
+  if (verse && verse.trim().length > 0) {
+    const verseText = `"${verse.trim()}"`;
+    doc.setFont('times', 'italic');
+    doc.setFontSize(12);
+    doc.setTextColor(INK.r, INK.g, INK.b);
+    const verseLines = doc.splitTextToSize(verseText, contentW - 40);
+    const boxH = verseLines.length * 16 + 24;
+
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(margin, y, contentW, boxH, 4, 4, 'FD');
+
+    doc.setFillColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.rect(margin, y, 4, boxH, 'F');
+
+    let vy = y + 18;
+    verseLines.forEach((line: string) => {
+      doc.text(line, pageW / 2, vy, { align: 'center' });
+      vy += 16;
+    });
+    y += boxH + 22;
+  }
+
+  const addSection = (label: string, text: string) => {
+    if (!text) return;
+
+    if (y > pageH - 140) {
+      addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+      doc.addPage();
+      addPageBackground(doc, pageW, pageH, PARCHMENT);
+      y = margin;
     }
 
-    const width = 1080;
-    const height = 1080;
-    canvas.width = width;
-    canvas.height = height;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.text(label.toUpperCase(), margin, y);
 
-    const bgColor = '#1a1a1a';
-    const goldColor = '#b8923e';
-    const textColor = '#ffffff';
+    doc.setDrawColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.setLineWidth(0.8);
+    const labelWidth = doc.getTextWidth(label.toUpperCase());
+    doc.line(margin + labelWidth + 8, y - 3, margin + labelWidth + 40, y - 3);
 
-    ctx.fillStyle = bgColor;
-    ctx.fillRect(0, 0, width, height);
+    y += 16;
 
-    const crossSize = 50;
-    drawCrossHelper(ctx, width / 2, 110, crossSize, goldColor);
+    doc.setFont('times', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(INK.r, INK.g, INK.b);
+    const lines = doc.splitTextToSize(text, contentW);
+    const lineHeight = 15;
 
-    ctx.strokeStyle = goldColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(150, 180);
-    ctx.lineTo(width - 150, 180);
-    ctx.stroke();
-
-    const wrapTextHelper = (
-      context: CanvasRenderingContext2D,
-      text: string,
-      maxWidth: number
-    ): string[] => {
-      const words = text.split(' ');
-      const lines: string[] = [];
-      let currentLine = '';
-
-      words.forEach((word) => {
-        const testLine = currentLine + (currentLine ? ' ' : '') + word;
-        const metrics = context.measureText(testLine);
-
-        if (metrics.width > maxWidth && currentLine) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      });
-
-      if (currentLine) {
-        lines.push(currentLine);
+    lines.forEach((line: string) => {
+      if (y > pageH - 80) {
+        addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+        doc.addPage();
+        addPageBackground(doc, pageW, pageH, PARCHMENT);
+        y = margin;
       }
-
-      return lines;
-    };
-
-    const verseY = 320;
-    const maxWidth = width - 120;
-    const lineHeight = 60;
-    ctx.font = 'italic 38px "Georgia", serif';
-    ctx.fillStyle = textColor;
-    ctx.textAlign = 'center';
-
-    const wrappedVerse = wrapTextHelper(ctx, `"${verse}"`, maxWidth);
-    let currentY = verseY;
-    wrappedVerse.forEach((line) => {
-      ctx.fillText(line, width / 2, currentY);
-      currentY += lineHeight;
+      doc.text(line, margin, y);
+      y += lineHeight;
     });
 
-    const referenceY = currentY + 80;
-    ctx.font = 'bold 34px "Georgia", serif';
-    ctx.fillStyle = goldColor;
-    ctx.fillText(reference, width / 2, referenceY);
+    y += 20;
+  };
 
-    ctx.font = '20px "Arial", sans-serif';
-    ctx.fillStyle = '#999999';
-    ctx.fillText(version, width / 2, referenceY + 40);
+  addSection('Contexto', d.context);
+  addSection('Explicação', d.explanation);
+  addSection('Aplicação', d.application);
 
-    ctx.strokeStyle = goldColor;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(150, height - 160);
-    ctx.lineTo(width - 150, height - 160);
-    ctx.stroke();
+  // Oração em cartão escuro
+  if (d.prayer) {
+    if (y > pageH - 200) {
+      addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+      doc.addPage();
+      addPageBackground(doc, pageW, pageH, PARCHMENT);
+      y = margin;
+    }
 
-    ctx.font = 'bold 28px "Georgia", serif';
-    ctx.fillStyle = goldColor;
-    ctx.fillText('365 com Deus', width / 2, height - 100);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.text('ORAÇÃO', margin, y);
+    y += 14;
 
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        resolve(url);
-      } else {
-        resolve('');
-      }
-    }, 'image/png');
-  });
+    const prayerLines = doc.splitTextToSize(d.prayer, contentW - 32);
+    const boxH = prayerLines.length * 15 + 28;
+
+    if (y + boxH > pageH - 80) {
+      addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+      doc.addPage();
+      addPageBackground(doc, pageW, pageH, PARCHMENT);
+      y = margin;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(GOLD.r, GOLD.g, GOLD.b);
+      doc.text('ORAÇÃO', margin, y);
+      y += 14;
+    }
+
+    doc.setFillColor(BG.r, BG.g, BG.b);
+    doc.roundedRect(margin, y, contentW, boxH, 6, 6, 'F');
+
+    doc.setFont('times', 'italic');
+    doc.setFontSize(11);
+    doc.setTextColor(240, 230, 210);
+
+    let py = y + 20;
+    prayerLines.forEach((line: string) => {
+      doc.text(line, margin + 16, py);
+      py += 15;
+    });
+
+    y += boxH + 20;
+  }
+
+  addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+
+  return doc.output('blob');
 }
 
-function drawCrossHelper(
-  context: CanvasRenderingContext2D,
+function addPageBackground(
+  doc: JsPDFInstance,
+  pageW: number,
+  pageH: number,
+  parchment: { r: number; g: number; b: number }
+) {
+  doc.setFillColor(parchment.r, parchment.g, parchment.b);
+  doc.rect(0, 0, pageW, pageH, 'F');
+}
+
+function addFooter(
+  doc: JsPDFInstance,
+  pageW: number,
+  pageH: number,
+  day: number,
+  margin: number,
+  muted: { r: number; g: number; b: number },
+  gold: { r: number; g: number; b: number }
+) {
+  doc.setDrawColor(gold.r, gold.g, gold.b);
+  doc.setLineWidth(0.5);
+  doc.line(margin, pageH - 50, pageW - margin, pageH - 50);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(muted.r, muted.g, muted.b);
+  doc.text('365 com Deus · Um ano de fidelidade na Palavra', margin, pageH - 32);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(gold.r, gold.g, gold.b);
+  doc.text(`Dia ${day} / 365`, pageW - margin, pageH - 32, { align: 'right' });
+}
+
+function drawCross(
+  doc: JsPDFInstance,
   x: number,
   y: number,
   size: number,
-  color: string
+  gold: { r: number; g: number; b: number }
 ) {
-  context.strokeStyle = color;
-  context.lineWidth = 5;
-  context.lineCap = 'round';
-
-  context.beginPath();
-  context.moveTo(x, y - size / 2);
-  context.lineTo(x, y + size / 2);
-  context.stroke();
-
-  context.beginPath();
-  context.moveTo(x - size / 3, y - size / 4);
-  context.lineTo(x + size / 3, y - size / 4);
-  context.stroke();
+  doc.setDrawColor(gold.r, gold.g, gold.b);
+  doc.setLineWidth(2);
+  doc.setLineCap('round');
+  doc.line(x, y - size, x, y + size);
+  doc.line(x - size * 0.55, y - size * 0.4, x + size * 0.55, y - size * 0.4);
 }
