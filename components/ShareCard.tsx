@@ -69,12 +69,46 @@ export function ShareCard({ devotional, verse, version = 'ACF' }: ShareCardProps
   };
 
   const copyTextSummary = () => {
-    const text =
-      `📖 365 com Deus — Dia ${devotional.day}\n` +
-      `${devotional.title}\n` +
-      `${devotional.passage} (${version})\n\n` +
-      (verse ? `"${verse}"\n\n` : '') +
-      `— Partilhado de 365 com Deus`;
+    const parts: string[] = [];
+    parts.push(`📖 365 com Deus — Dia ${devotional.day} / 365`);
+    parts.push(devotional.title);
+    parts.push(`${devotional.passage}  ·  ${version}`);
+    parts.push('');
+
+    if (verse && verse.trim()) {
+      parts.push(`"${verse.trim()}"`);
+      parts.push('');
+    }
+
+    if (devotional.context) {
+      parts.push('— CONTEXTO —');
+      parts.push(devotional.context);
+      parts.push('');
+    }
+
+    if (devotional.explanation) {
+      parts.push('— EXPLICAÇÃO —');
+      parts.push(devotional.explanation);
+      parts.push('');
+    }
+
+    if (devotional.application) {
+      parts.push('— APLICAÇÃO —');
+      parts.push(devotional.application);
+      parts.push('');
+    }
+
+    if (devotional.prayer) {
+      parts.push('— ORAÇÃO —');
+      parts.push(devotional.prayer);
+      parts.push('');
+    }
+
+    parts.push('—');
+    parts.push('365 com Deus · Um ano de fidelidade na Palavra');
+
+    const text = parts.join('\n');
+
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
@@ -156,7 +190,7 @@ export function ShareCard({ devotional, verse, version = 'ACF' }: ShareCardProps
           ) : (
             <>
               <CopyIcon size={18} />
-              <span>Copiar resumo</span>
+              <span>Copiar texto</span>
             </>
           )}
         </button>
