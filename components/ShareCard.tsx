@@ -104,6 +104,12 @@ export function ShareCard({ devotional, verse, version = 'ACF' }: ShareCardProps
       parts.push('');
     }
 
+    if (devotional.challenge) {
+      parts.push('— DESAFIO DE HOJE —');
+      parts.push(devotional.challenge);
+      parts.push('');
+    }
+
     parts.push('—');
     parts.push('365 com Deus · Um ano de fidelidade na Palavra');
 
@@ -411,6 +417,46 @@ function buildDevotionalPdf(
     prayerLines.forEach((line: string) => {
       doc.text(line, margin + 16, py);
       py += 15;
+    });
+
+    y += boxH + 20;
+  }
+
+  // Desafio de Hoje — cartão dourado em destaque
+  if (d.challenge) {
+    const labelH = 20;
+    const textLines = doc.splitTextToSize(d.challenge, contentW - 32);
+    const boxH = labelH + textLines.length * 15 + 22;
+
+    if (y + boxH > pageH - 80) {
+      addFooter(doc, pageW, pageH, d.day, margin, MUTED, GOLD);
+      doc.addPage();
+      addPageBackground(doc, pageW, pageH, PARCHMENT);
+      y = margin;
+    }
+
+    // Fundo dourado claro com borda dourada
+    doc.setFillColor(251, 244, 228);
+    doc.setDrawColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.setLineWidth(1);
+    doc.roundedRect(margin, y, contentW, boxH, 8, 8, 'FD');
+
+    // Barra dourada à esquerda
+    doc.setFillColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.rect(margin, y, 5, boxH, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(GOLD.r, GOLD.g, GOLD.b);
+    doc.text('DESAFIO DE HOJE', margin + 18, y + 18);
+
+    doc.setFont('times', 'normal');
+    doc.setFontSize(11);
+    doc.setTextColor(INK.r, INK.g, INK.b);
+    let cy = y + labelH + 18;
+    textLines.forEach((line: string) => {
+      doc.text(line, margin + 18, cy);
+      cy += 15;
     });
 
     y += boxH + 20;

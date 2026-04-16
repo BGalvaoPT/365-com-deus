@@ -20,6 +20,7 @@ import {
   BookIcon,
   BibleIcon,
   ChevronDownIcon,
+  FireIcon,
 } from "@/components/Icons";
 import Link from "next/link";
 
@@ -309,6 +310,27 @@ export default function DevotionalPage() {
               {devotional.prayer}
             </p>
           </section>
+
+          {/* Desafio de Hoje */}
+          {devotional.challenge && (
+            <section className="mb-8 bg-gradient-to-br from-gold-600/10 via-gold-600/5 to-transparent dark:from-gold-500/10 dark:via-gold-500/5 border-2 border-gold-600/20 dark:border-gold-500/20 rounded-2xl p-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-gold-600/5 dark:bg-gold-500/5 rounded-full -mr-8 -mt-8" />
+              <div className="relative">
+                <div className="flex items-center gap-2 mb-3">
+                  <FireIcon size={20} className="text-gold-600 dark:text-gold-500" />
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest text-gold-600 dark:text-gold-500">
+                    Desafio de Hoje
+                  </h3>
+                </div>
+                <p className="text-[15px] leading-[1.7] text-parchment-900 dark:text-neutral-100 font-medium">
+                  {devotional.challenge}
+                </p>
+                <p className="text-[11px] text-parchment-500 dark:text-neutral-500 mt-3">
+                  Põe em prática antes do fim do dia.
+                </p>
+              </div>
+            </section>
+          )}
         </>
       ) : (
         <div className="card p-7 text-center mb-8">
