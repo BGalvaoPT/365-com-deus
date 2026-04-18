@@ -501,21 +501,9 @@ async function fetchMultiChapterRange(
   const chapterPromises: Promise<BiblePassage | null>[] = [];
 
   for (let ch = startChapter; ch <= endChapter; ch++) {
-    let sv: number | undefined;
-    let ev: number | undefined;
-
-    if (ch === startChapter && startVerse !== undefined) {
-      // Primeiro capítulo: do startVerse até ao fim do capítulo
-      sv = startVerse;
-      ev = undefined; // sem limite = até ao fim
-    } else if (ch === endChapter && endChapterVerse !== undefined) {
-      // Último capítulo: do versículo 1 até endChapterVerse
-      sv = 1;
-      ev = endChapterVerse;
-    }
-    // Capítulos intermédios: buscar inteiro (sv e ev ficam undefined)
-
-    chapterPromises.push(fetchSingleChapterPassage(book, ch, sv, ev, version));
+    // Para todos os capítulos, buscar o capítulo inteiro (sv/ev undefined)
+    // Depois filtramos os versículos do primeiro e último capítulo
+    chapterPromises.push(fetchSingleChapterPassage(book, ch, undefined, undefined, version));
   }
 
   const results = await Promise.all(chapterPromises);
