@@ -131,18 +131,37 @@ export function BibleReader({ passage }: BibleReaderProps) {
 
                 {/* Versículos */}
                 <div className="space-y-3 font-serif text-parchment-800 dark:text-parchment-200 leading-[1.8]">
-                  {data.verses.map((verse, index) => (
-                    <div key={index} className="flex gap-3">
-                      {/* Número do versículo em ouro */}
-                      <span className="inline-flex items-start font-semibold text-gold-600 dark:text-gold-400 min-w-fit pt-0.5">
-                        {verse.verse}
-                      </span>
-                      {/* Texto do versículo */}
-                      <p className="text-base leading-[1.8]">
-                        {verse.text}
-                      </p>
-                    </div>
-                  ))}
+                  {data.verses.map((verse, index) => {
+                    // Detectar mudança de capítulo para mostrar separador
+                    const prevVerse = index > 0 ? data.verses[index - 1] : null;
+                    const isNewChapter = prevVerse && verse.chapter !== prevVerse.chapter;
+                    const isMultiChapter = data.verses.length > 1 &&
+                      data.verses[0].chapter !== data.verses[data.verses.length - 1].chapter;
+
+                    return (
+                      <div key={index}>
+                        {isNewChapter && (
+                          <div className="flex items-center gap-3 my-4">
+                            <div className="flex-1 h-px bg-parchment-200 dark:bg-neutral-700" />
+                            <span className="text-xs font-semibold text-gold-500 dark:text-gold-500 uppercase tracking-wider">
+                              Capítulo {verse.chapter}
+                            </span>
+                            <div className="flex-1 h-px bg-parchment-200 dark:bg-neutral-700" />
+                          </div>
+                        )}
+                        <div className="flex gap-3">
+                          {/* Número do versículo em ouro — mostra cap:v se multi-capítulo */}
+                          <span className="inline-flex items-start font-semibold text-gold-600 dark:text-gold-400 min-w-fit pt-0.5 text-sm tabular-nums">
+                            {isMultiChapter ? `${verse.chapter}:${verse.verse}` : verse.verse}
+                          </span>
+                          {/* Texto do versículo */}
+                          <p className="text-base leading-[1.8]">
+                            {verse.text}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* Fonte */}

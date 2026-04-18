@@ -382,28 +382,37 @@ async function fetchFromBollsLife(
 
     const data = await response.json();
 
-    if (!data.text) {
+    // Processar resposta — Bolls.life pode retornar array diretamente ou { text: ... }
+    const verses: BibleVerse[] = [];
+    const textParts: string[] = [];
+    const items = Array.isArray(data) ? data : (Array.isArray(data.text) ? data.text : null);
+
+    if (!items || items.length === 0) {
       return null;
     }
 
-    // Processar resposta do Bolls.life
-    const verses: BibleVerse[] = [];
-    const textParts: string[] = [];
-
-    if (Array.isArray(data.text)) {
-      data.text.forEach((item: any) => {
+    items.forEach((item: any) => {
+      const verseText = item.text || item.t || '';
+      const verseNum = item.verse || item.pk || 0;
+      if (verseText) {
         verses.push({
           book: parsedRef.book,
           chapter: parsedRef.chapter,
-          verse: item.verse,
-          text: item.text,
+          verse: verseNum,
+          text: verseText.trim(),
         });
-        textParts.push(item.text);
-      });
-    }
+        textParts.push(verseText.trim());
+      }
+    });
+
+    if (verses.length === 0) return null;
+
+    const refStr = parsedRef.startVerse
+      ? `${parsedRef.book} ${parsedRef.chapter}:${parsedRef.startVerse}${parsedRef.endVerse ? '-' + parsedRef.endVerse : ''}`
+      : `${parsedRef.book} ${parsedRef.chapter}`;
 
     return {
-      reference: `${parsedRef.book} ${parsedRef.chapter}:${parsedRef.startVerse || ''}`,
+      reference: refStr,
       version,
       text: textParts.join(' '),
       verses,
@@ -441,10 +450,106 @@ function getBookIndex(englishBookName: string): number {
 }
 
 /**
+ * Busca uma passagem de um único capítulo (ou trecho dentro dele)
+ * Função auxiliar usada internamente para compor resultados multi-capítulo
+ */
+async function fetchSingleChapterPassage(
+  book: string,
+  chapter: number,
+  startVerse?: number,
+  endVerse?: number,
+  version: BibleVersion = 'ARC'
+): Promise<BiblePassage | null> {
+  const singleRef = {
+    book,
+    chapter,
+    startVerse,
+    endVerse,
+    endChapter: undefined,
+    endChapterVerse: undefined,
+  };
+
+  // Tentar Bible API primeiro
+  let result = await fetchFromBibleApi(singleRef, version);
+
+  // Fallback para Bolls.life
+  if (!result) {
+    result = await fetchFromBollsLife(singleRef, version);
+  }
+
+  // Fallback para ARC se versão diferente falhou
+  if (!result && version !== 'ARC') {
+    result = await fetchFromBibleApi(singleRef, 'ARC');
+  }
+
+  return result;
+}
+
+/**
+ * Busca uma passagem multi-capítulo dividindo em pedidos por capítulo
+ * Ex: "Gálatas 1:1-3:29" → busca cap 1 (v1+), cap 2 (inteiro), cap 3 (:1-29)
+ */
+async function fetchMultiChapterRange(
+  parsedRef: NonNullable<ReturnType<typeof parsePortugueseReference>>,
+  version: BibleVersion,
+  originalReference: string
+): Promise<BiblePassage | null> {
+  const { book, chapter: startChapter, startVerse, endChapter, endChapterVerse } = parsedRef;
+
+  if (endChapter === undefined) return null;
+
+  const chapterPromises: Promise<BiblePassage | null>[] = [];
+
+  for (let ch = startChapter; ch <= endChapter; ch++) {
+    let sv: number | undefined;
+    let ev: number | undefined;
+
+    if (ch === startChapter && startVerse !== undefined) {
+      // Primeiro capítulo: do startVerse até ao fim do capítulo
+      sv = startVerse;
+      ev = undefined; // sem limite = até ao fim
+    } else if (ch === endChapter && endChapterVerse !== undefined) {
+      // Último capítulo: do versículo 1 até endChapterVerse
+      sv = 1;
+      ev = endChapterVerse;
+    }
+    // Capítulos intermédios: buscar inteiro (sv e ev ficam undefined)
+
+    chapterPromises.push(fetchSingleChapterPassage(book, ch, sv, ev, version));
+  }
+
+  const results = await Promise.all(chapterPromises);
+
+  // Combinar resultados — ignorar capítulos que falharam
+  const allVerses: BibleVerse[] = [];
+  const textParts: string[] = [];
+  let source: 'bible-api' | 'bolls-life' = 'bible-api';
+
+  for (const result of results) {
+    if (result) {
+      allVerses.push(...result.verses);
+      textParts.push(result.text);
+      source = result.source;
+    }
+  }
+
+  if (allVerses.length === 0) return null;
+
+  return {
+    reference: originalReference,
+    version,
+    text: textParts.join('\n'),
+    verses: allVerses,
+    source,
+  };
+}
+
+/**
  * Busca uma passagem bíblica em português
  *
  * Implementa fallback automático entre APIs e usa cache em memória
- * para otimizar chamadas repetidas.
+ * para otimizar chamadas repetidas. Para intervalos multi-capítulo,
+ * faz pedidos separados por capítulo e combina os resultados.
  *
  * @param passage - Referência bíblica em português (ex: "João 3:16")
  * @param version - Versão desejada (padrão: "ARC")
@@ -480,23 +585,28 @@ export async function fetchPassage(
     return null;
   }
 
-  // Tentar buscar da API primária (Bible API)
-  let result = await fetchFromBibleApi(parsedRef, version);
+  let result: BiblePassage | null = null;
 
-  // Se falhar, tentar API secundária (Bolls.life)
-  if (!result) {
-    console.info(
-      `Fallback para Bolls.life para ${passage} (versão ${version})`
-    );
-    result = await fetchFromBollsLife(parsedRef, version);
-  }
+  // Se for multi-capítulo, dividir em pedidos por capítulo
+  if (parsedRef.endChapter !== undefined && parsedRef.endChapter > parsedRef.chapter) {
+    result = await fetchMultiChapterRange(parsedRef, version, passage);
+  } else {
+    // Passagem dentro de um único capítulo — fluxo normal
+    result = await fetchFromBibleApi(parsedRef, version);
 
-  // Se ainda assim falhar, tentar novamente com versão padrão
-  if (!result && version !== 'ARC') {
-    console.info(
-      `Fallback para versão ARC para ${passage}`
-    );
-    result = await fetchFromBibleApi(parsedRef, 'ARC');
+    if (!result) {
+      console.info(
+        `Fallback para Bolls.life para ${passage} (versão ${version})`
+      );
+      result = await fetchFromBollsLife(parsedRef, version);
+    }
+
+    if (!result && version !== 'ARC') {
+      console.info(
+        `Fallback para versão ARC para ${passage}`
+      );
+      result = await fetchFromBibleApi(parsedRef, 'ARC');
+    }
   }
 
   // Armazenar em cache se obteve resultado
