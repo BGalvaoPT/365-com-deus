@@ -296,9 +296,10 @@ async function fetchFromBibleApi(
       apiReference += `-${parsedRef.endVerse}`;
     }
 
-    const response = await fetch(
-      `https://bible-api.com/${apiReference}?translation=${apiVersion}`
-    );
+    const encodedRef = encodeURIComponent(apiReference);
+    const url = `https://bible-api.com/${encodedRef}?translation=${apiVersion}`;
+    console.info(`[Bible API] Fetching: ${url}`);
+    const response = await fetch(url);
 
     if (!response.ok) {
       console.warn(
@@ -486,8 +487,10 @@ async function fetchSingleChapterPassage(
 }
 
 /**
- * Busca uma passagem multi-capítulo dividindo em pedidos por capítulo
- * Ex: "Gálatas 1:1-3:29" → busca cap 1 (v1+), cap 2 (inteiro), cap 3 (:1-29)
+ * Busca uma passagem multi-capítulo com múltiplas estratégias:
+ * 1. Tenta pedido directo à Bible API com intervalo completo (ex: "ephesians 4:1-6:24")
+ * 2. Se falhar, tenta capítulo a capítulo na Bible API
+ * 3. Se falhar, tenta capítulo a capítulo no Bolls.life
  */
 async function fetchMultiChapterRange(
   parsedRef: NonNullable<ReturnType<typeof parsePortugueseReference>>,
@@ -498,11 +501,24 @@ async function fetchMultiChapterRange(
 
   if (endChapter === undefined) return null;
 
+  // --- Estratégia 1: pedido directo com intervalo completo ---
+  try {
+    const directResult = await fetchFromBibleApi(parsedRef, version);
+    if (directResult && directResult.verses && directResult.verses.length > 0) {
+      return {
+        ...directResult,
+        reference: originalReference,
+      };
+    }
+  } catch (e) {
+    console.warn('Pedido directo multi-capítulo falhou, tentando capítulo a capítulo...', e);
+  }
+
+  // --- Estratégia 2: capítulo a capítulo via fetchSingleChapterPassage ---
+  // (tenta Bible API, depois Bolls.life para cada capítulo)
   const chapterPromises: Promise<BiblePassage | null>[] = [];
 
   for (let ch = startChapter; ch <= endChapter; ch++) {
-    // Para todos os capítulos, buscar o capítulo inteiro (sv/ev undefined)
-    // Depois filtramos os versículos do primeiro e último capítulo
     chapterPromises.push(fetchSingleChapterPassage(book, ch, undefined, undefined, version));
   }
 
@@ -521,15 +537,61 @@ async function fetchMultiChapterRange(
     }
   }
 
-  if (allVerses.length === 0) return null;
+  if (allVerses.length > 0) {
+    return {
+      reference: originalReference,
+      version,
+      text: textParts.join('\n'),
+      verses: allVerses,
+      source,
+    };
+  }
 
-  return {
-    reference: originalReference,
-    version,
-    text: textParts.join('\n'),
-    verses: allVerses,
-    source,
-  };
+  // --- Estratégia 3: capítulo a capítulo via Bolls.life directamente ---
+  const bollsPromises: Promise<BiblePassage | null>[] = [];
+  for (let ch = startChapter; ch <= endChapter; ch++) {
+    const chapterRef = {
+      book,
+      chapter: ch,
+      startVerse: undefined,
+      endVerse: undefined,
+      endChapter: undefined,
+      endChapterVerse: undefined,
+    };
+    bollsPromises.push(fetchFromBollsLife(chapterRef, version));
+  }
+
+  const bollsResults = await Promise.all(bollsPromises);
+  const bollsVerses: BibleVerse[] = [];
+  const bollsText: string[] = [];
+
+  for (const result of bollsResults) {
+    if (result) {
+      bollsVerses.push(...result.verses);
+      bollsText.push(result.text);
+    }
+  }
+
+  if (bollsVerses.length > 0) {
+    return {
+      reference: originalReference,
+      version,
+      text: bollsText.join('\n'),
+      verses: bollsVerses,
+      source: 'bolls-life',
+    };
+  }
+
+  // --- Estratégia 4: tentar ARC como fallback se versão diferente ---
+  if (version !== 'ARC') {
+    return fetchMultiChapterRange(
+      parsedRef,
+      'ARC',
+      originalReference,
+    );
+  }
+
+  return null;
 }
 
 /**
