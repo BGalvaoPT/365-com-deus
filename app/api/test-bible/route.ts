@@ -129,10 +129,39 @@ export async function GET() {
     'https://bible-api.com/ephesians%205:1-33?translation=almeida'
   );
 
-  // Try a different free Bible API
-  results['abibliadigital_eph4'] = await testFetch(
-    'ABibliaDigital - Ephesians 4 (nvi)',
-    'https://www.abibliadigital.com.br/api/verses/nvi/ef/4'
+  // ====== GetBible.net API tests ======
+  // Format: /v2/{translation}/{book_number}/{chapter}.json
+  // Ephesians = book 49, Chapter 4
+  results['getbible_almeida_eph4'] = await testFetch(
+    'GetBible.net - Almeida Ephesians 4',
+    'https://api.getbible.net/v2/almeida/49/4.json'
+  );
+
+  results['getbible_almeida_eph5'] = await testFetch(
+    'GetBible.net - Almeida Ephesians 5',
+    'https://api.getbible.net/v2/almeida/49/5.json'
+  );
+
+  results['getbible_almeida_eph6'] = await testFetch(
+    'GetBible.net - Almeida Ephesians 6',
+    'https://api.getbible.net/v2/almeida/49/6.json'
+  );
+
+  results['getbible_almeida_john3'] = await testFetch(
+    'GetBible.net - Almeida John 3',
+    'https://api.getbible.net/v2/almeida/43/3.json'
+  );
+
+  // Test bible-api.com with verse range
+  results['bible-api_eph4_1-32_almeida'] = await testFetch(
+    'Bible API - Ephesians 4:1-32 verse range',
+    'https://bible-api.com/ephesians%204:1-32?translation=almeida'
+  );
+
+  // Free Use Bible API (bible.helloao.org)
+  results['helloao_eph4_pt'] = await testFetch(
+    'HelloAO Bible - Ephesians 4 PT',
+    'https://bible.helloao.org/api/EPH/4/pt-BR-Almeida.json'
   );
 
   return NextResponse.json(results, { status: 200 });
