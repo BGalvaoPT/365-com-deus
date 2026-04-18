@@ -86,10 +86,53 @@ export async function GET() {
     );
   }
 
-  // Try get-translations endpoint
-  results['bolls_translations'] = await testFetch(
-    'Bolls.life - get translations list',
-    'https://bolls.life/static/bolls/app/views/languages.json'
+  // Get full translations list from Bolls.life
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const r = await fetch('https://bolls.life/static/bolls/app/views/languages.json', { signal: controller.signal });
+    clearTimeout(timer);
+    const langs = await r.json();
+    // Find Portuguese translations
+    const allTranslations: any[] = [];
+    for (const lang of langs) {
+      if (lang.translations) {
+        for (const t of lang.translations) {
+          allTranslations.push({
+            language: lang.language,
+            short_name: t.short_name,
+            full_name: t.full_name,
+          });
+        }
+      }
+    }
+    // Filter for Portuguese or anything with "almeida", "port", "pt"
+    const ptTranslations = allTranslations.filter((t: any) => {
+      const search = `${t.language} ${t.full_name} ${t.short_name}`.toLowerCase();
+      return search.includes('portug') || search.includes('almeida') || search.includes('pt_') || search.includes('braz');
+    });
+    results['bolls_portuguese_translations'] = ptTranslations.length > 0 ? ptTranslations : 'NONE FOUND';
+    results['bolls_all_translations_count'] = allTranslations.length;
+    results['bolls_all_slugs'] = allTranslations.map((t: any) => t.short_name);
+  } catch(e: any) {
+    results['bolls_translations_error'] = e.message;
+  }
+
+  // Test bible-api.com with verse range instead of whole chapter
+  results['bible-api_eph4_1-32_almeida'] = await testFetch(
+    'Bible API - Ephesians 4:1-32 (almeida) - verse range',
+    'https://bible-api.com/ephesians%204:1-32?translation=almeida'
+  );
+
+  results['bible-api_eph5_1-33_almeida'] = await testFetch(
+    'Bible API - Ephesians 5:1-33 (almeida) - verse range',
+    'https://bible-api.com/ephesians%205:1-33?translation=almeida'
+  );
+
+  // Try a different free Bible API
+  results['abibliadigital_eph4'] = await testFetch(
+    'ABibliaDigital - Ephesians 4 (nvi)',
+    'https://www.abibliadigital.com.br/api/verses/nvi/ef/4'
   );
 
   return NextResponse.json(results, { status: 200 });
