@@ -165,6 +165,8 @@ function parsePortugueseReference(reference: string): {
   chapter: number;
   startVerse?: number;
   endVerse?: number;
+  endChapter?: number;
+  endChapterVerse?: number;
 } | null {
   // Remove espaços extras
   const normalized = reference.trim();
@@ -194,6 +196,8 @@ function parsePortugueseReference(reference: string): {
   let chapter: number;
   let startVerse: number | undefined;
   let endVerse: number | undefined;
+  let endChapter: number | undefined;
+  let endChapterVerse: number | undefined;
 
   if (singleChapterMatch && !multiChapterMatch) {
     // "João 3:16" ou "João 3:16-18"
@@ -202,18 +206,27 @@ function parsePortugueseReference(reference: string): {
     startVerse = parseInt(singleChapterMatch[3], 10);
     endVerse = singleChapterMatch[4] ? parseInt(singleChapterMatch[4], 10) : undefined;
   } else if (multiChapterMatch) {
-    // "Génesis 1:1-2:3" → buscar apenas o primeiro capítulo (Cap 1:1 até fim do capítulo)
+    // "Génesis 1:1-2:3" → buscar intervalo completo entre capítulos
     bookName = multiChapterMatch[1].trim();
     chapter = parseInt(multiChapterMatch[2], 10);
     startVerse = parseInt(multiChapterMatch[3], 10);
-    endVerse = undefined; // Buscar até ao fim do capítulo
+    endChapter = parseInt(multiChapterMatch[4], 10);
+    endChapterVerse = parseInt(multiChapterMatch[5], 10);
   } else if (chapterRangeMatch) {
-    // "1 Coríntios 8:1-10:33" ou "Romanos 1:1-Filémon 1:25"
-    // → buscar apenas o primeiro capítulo mencionado
+    // "1 Coríntios 8:1-10:33" ou padrões semelhantes
+    // Tentar extrair endChapter:endVerse do lado direito
     bookName = chapterRangeMatch[1].trim();
     chapter = parseInt(chapterRangeMatch[2], 10);
     startVerse = chapterRangeMatch[3] ? parseInt(chapterRangeMatch[3], 10) : undefined;
-    endVerse = undefined;
+
+    // O grupo 4 contém tudo depois do "-", pode ser "10:33" ou "Cap:Verso"
+    const rightSide = chapterRangeMatch[4].trim();
+    const rightMatch = rightSide.match(/^(\d+):(\d+)$/);
+    if (rightMatch) {
+      endChapter = parseInt(rightMatch[1], 10);
+      endChapterVerse = parseInt(rightMatch[2], 10);
+    }
+    // Se não conseguir parsear, buscar só o primeiro capítulo inteiro
   } else if (chapterOnlyMatch) {
     // "Salmos 23" → buscar capítulo inteiro
     bookName = chapterOnlyMatch[1].trim();
@@ -235,6 +248,8 @@ function parsePortugueseReference(reference: string): {
     chapter,
     startVerse,
     endVerse,
+    endChapter,
+    endChapterVerse,
   };
 }
 
@@ -264,13 +279,21 @@ async function fetchFromBibleApi(
   try {
     const apiVersion = VERSION_API_MAPPING[version];
 
-    // Construir a referência no formato da API: "genesis 1:1"
+    // Construir a referência no formato da API
+    // Ex: "genesis 1:1", "galatians 1:1-3:29", "john 3:16-18"
     let apiReference = `${parsedRef.book} ${parsedRef.chapter}`;
     if (parsedRef.startVerse !== undefined) {
       apiReference += `:${parsedRef.startVerse}`;
-      if (parsedRef.endVerse !== undefined) {
-        apiReference += `-${parsedRef.endVerse}`;
+    }
+    if (parsedRef.endChapter !== undefined) {
+      // Intervalo entre capítulos: "galatians 1:1-3:29"
+      apiReference += `-${parsedRef.endChapter}`;
+      if (parsedRef.endChapterVerse !== undefined) {
+        apiReference += `:${parsedRef.endChapterVerse}`;
       }
+    } else if (parsedRef.endVerse !== undefined) {
+      // Intervalo dentro do mesmo capítulo: "john 3:16-18"
+      apiReference += `-${parsedRef.endVerse}`;
     }
 
     const response = await fetch(
