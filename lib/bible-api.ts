@@ -296,9 +296,9 @@ async function fetchFromBibleApi(
       apiReference += `-${parsedRef.endVerse}`;
     }
 
-    const encodedRef = encodeURIComponent(apiReference);
+    // Só codificar espaços (não usar encodeURIComponent que codifica : e -)
+    const encodedRef = apiReference.replace(/ /g, '%20');
     const url = `https://bible-api.com/${encodedRef}?translation=${apiVersion}`;
-    console.info(`[Bible API] Fetching: ${url}`);
     const response = await fetch(url);
 
     if (!response.ok) {
