@@ -141,15 +141,32 @@ const passageCache: Map<string, BiblePassage> = new Map();
  */
 const AVAILABLE_VERSIONS: BibleVersion[] = ['ARC', 'NVI', 'ARA', 'ACF'];
 
+/** Timeout para pedidos a APIs externas (8 segundos) */
+const API_TIMEOUT_MS = 8000;
+
+/**
+ * Faz fetch com timeout usando AbortController
+ */
+async function fetchWithTimeout(url: string, timeoutMs: number = API_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal });
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * Mapeamento de versões para códigos de API
  * Bible-API usa códigos específicos para cada versão
  */
 const VERSION_API_MAPPING: Record<BibleVersion, string> = {
   'ARC': 'almeida',  // Almeida Revista e Corrigida
-  'NVI': 'nvi',      // Nova Versão Internacional
-  'ARA': 'ara',      // Almeida Revista e Atualizada
-  'ACF': 'acf',      // Almeida Corrigida Fiel
+  'NVI': 'almeida',  // Fallback para almeida (bible-api.com só tem almeida em PT)
+  'ARA': 'almeida',  // Fallback para almeida
+  'ACF': 'almeida',  // Fallback para almeida
 };
 
 /**
@@ -299,7 +316,7 @@ async function fetchFromBibleApi(
     // Só codificar espaços (não usar encodeURIComponent que codifica : e -)
     const encodedRef = apiReference.replace(/ /g, '%20');
     const url = `https://bible-api.com/${encodedRef}?translation=${apiVersion}`;
-    const response = await fetch(url);
+    const response = await fetchWithTimeout(url);
 
     if (!response.ok) {
       console.warn(
@@ -346,33 +363,27 @@ async function fetchFromBollsLife(
   if (!parsedRef) return null;
 
   try {
-    // Bolls.life usa um formato de ID específico para cada versão
-    // Para português, usamos códigos como 'pt_BRA-NVI', 'pt_BRA-ARC', etc.
-    const versionMapping: Record<BibleVersion, string> = {
-      'ARC': 'pt_BRA-ARC',
-      'NVI': 'pt_BRA-NVI',
-      'ARA': 'pt_BRA-ARA',
-      'ACF': 'pt_BRA-ACF',
+    // Bolls.life usa IDs numéricos para traduções em português
+    // Ver: https://bolls.life/api/ — IDs verificados para traduções PT
+    const versionMapping: Record<BibleVersion, number> = {
+      'ARC': 20,   // Almeida Revista e Corrigida
+      'NVI': 211,  // Nova Versão Internacional (PT)
+      'ARA': 212,  // Almeida Revista e Atualizada
+      'ACF': 213,  // Almeida Corrigida Fiel
     };
 
-    const apiVersion = versionMapping[version];
+    const translationId = versionMapping[version];
 
-    // Construir referência: "1/1/1" para Gênesis 1:1
+    // Construir referência: bookIndex/chapter
     const bookIndex = getBookIndex(parsedRef.book);
     if (bookIndex === -1) {
       return null;
     }
 
-    let endpoint = `https://bolls.life/get-text/${apiVersion}/${bookIndex}/${parsedRef.chapter}/`;
+    // Formato Bolls.life: /get-chapter/TRANSLATION_ID/BOOK_INDEX/CHAPTER/
+    let endpoint = `https://bolls.life/get-chapter/${translationId}/${bookIndex}/${parsedRef.chapter}/`;
 
-    if (parsedRef.startVerse !== undefined) {
-      endpoint += `${parsedRef.startVerse}`;
-      if (parsedRef.endVerse !== undefined) {
-        endpoint += `-${parsedRef.endVerse}`;
-      }
-    }
-
-    const response = await fetch(endpoint);
+    const response = await fetchWithTimeout(endpoint);
 
     if (!response.ok) {
       console.warn(
@@ -383,7 +394,8 @@ async function fetchFromBollsLife(
 
     const data = await response.json();
 
-    // Processar resposta — Bolls.life pode retornar array diretamente ou { text: ... }
+    // Processar resposta — Bolls.life retorna array de versículos
+    // Cada item: { chapter, verse, text } ou { pk, verse, text }
     const verses: BibleVerse[] = [];
     const textParts: string[] = [];
     const items = Array.isArray(data) ? data : (Array.isArray(data.text) ? data.text : null);
@@ -395,14 +407,23 @@ async function fetchFromBollsLife(
     items.forEach((item: any) => {
       const verseText = item.text || item.t || '';
       const verseNum = item.verse || item.pk || 0;
+
+      // Filtrar versículos se startVerse/endVerse foram especificados
+      if (parsedRef.startVerse !== undefined && verseNum < parsedRef.startVerse) return;
+      if (parsedRef.endVerse !== undefined && verseNum > parsedRef.endVerse) return;
+
       if (verseText) {
-        verses.push({
-          book: parsedRef.book,
-          chapter: parsedRef.chapter,
-          verse: verseNum,
-          text: verseText.trim(),
-        });
-        textParts.push(verseText.trim());
+        // Limpar tags HTML que o Bolls.life às vezes inclui
+        const cleanText = verseText.replace(/<[^>]*>/g, '').trim();
+        if (cleanText) {
+          verses.push({
+            book: parsedRef.book,
+            chapter: parsedRef.chapter,
+            verse: verseNum,
+            text: cleanText,
+          });
+          textParts.push(cleanText);
+        }
       }
     });
 
